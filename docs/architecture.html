@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ustadji — Architecture Document</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --surface-2: #243044;
+      --border: #2d3f56;
+      --text: #e8edf4;
+      --text-muted: #94a3b8;
+      --accent: #10b981;
+      --accent-dim: #065f46;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --info: #3b82f6;
+      --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+      --mono: "SF Mono", "Fira Code", Consolas, monospace;
+      --sidebar-w: 280px;
+      --radius: 10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      display: flex;
+      min-height: 100vh;
+    }
+
+    /* Sidebar */
+    nav.sidebar {
+      position: fixed;
+      top: 0; left: 0;
+      width: var(--sidebar-w);
+      height: 100vh;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 1.5rem 0;
+      overflow-y: auto;
+      z-index: 100;
+    }
+
+    nav.sidebar .brand {
+      padding: 0 1.25rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1rem;
+    }
+
+    nav.sidebar .brand h1 {
+      font-size: 1.35rem;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    nav.sidebar .brand p {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    nav.sidebar a {
+      display: block;
+      padding: 0.45rem 1.25rem;
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.88rem;
+      transition: all 0.15s;
+      border-left: 3px solid transparent;
+    }
+
+    nav.sidebar a:hover,
+    nav.sidebar a.active {
+      color: var(--text);
+      background: var(--surface-2);
+      border-left-color: var(--accent);
+    }
+
+    nav.sidebar .section-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      padding: 1rem 1.25rem 0.35rem;
+      font-weight: 600;
+    }
+
+    /* Main content */
+    main {
+      margin-left: var(--sidebar-w);
+      flex: 1;
+      max-width: 960px;
+      padding: 2.5rem 3rem 4rem;
+    }
+
+    section {
+      margin-bottom: 3.5rem;
+      scroll-margin-top: 2rem;
+    }
+
+    h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 2px solid var(--accent-dim);
+    }
+
+    h3 {
+      font-size: 1.15rem;
+      font-weight: 600;
+      margin: 1.75rem 0 0.75rem;
+      color: var(--accent);
+    }
+
+    h4 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 1.25rem 0 0.5rem;
+      color: var(--text);
+    }
+
+    p { margin-bottom: 0.85rem; color: var(--text-muted); }
+    p strong { color: var(--text); }
+
+    .lead {
+      font-size: 1.05rem;
+      color: var(--text);
+      margin-bottom: 1.5rem;
+    }
+
+    /* Cards & badges */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+      margin: 1.25rem 0;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.25rem;
+    }
+
+    .card .label {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      margin-bottom: 0.35rem;
+    }
+
+    .card .value {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      margin-right: 0.35rem;
+      margin-bottom: 0.35rem;
+    }
+
+    .badge-green  { background: #064e3b; color: #6ee7b7; }
+    .badge-blue   { background: #1e3a5f; color: #93c5fd; }
+    .badge-yellow { background: #78350f; color: #fcd34d; }
+    .badge-red    { background: #7f1d1d; color: #fca5a5; }
+    .badge-gray   { background: var(--surface-2); color: var(--text-muted); }
+
+    /* Tables */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      font-size: 0.88rem;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 0.65rem 0.85rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      background: var(--surface);
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    tr:hover td { background: var(--surface); }
+
+    code, .path {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      background: var(--surface-2);
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      color: #a5f3fc;
+    }
+
+    pre {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      line-height: 1.55;
+      margin: 1rem 0;
+      color: #cbd5e1;
+    }
+
+    /* Alert boxes */
+    .alert {
+      border-radius: var(--radius);
+      padding: 1rem 1.25rem;
+      margin: 1.25rem 0;
+      border-left: 4px solid;
+      font-size: 0.92rem;
+    }
+
+    .alert-danger  { background: #1c1017; border-color: var(--danger);  color: #fca5a5; }
+    .alert-warning { background: #1c1810; border-color: var(--warning); color: #fcd34d; }
+    .alert-info    { background: #101c2c; border-color: var(--info);    color: #93c5fd; }
+    .alert-success { background: #0f1f1a; border-color: var(--accent);  color: #6ee7b7; }
+
+    .alert strong { display: block; margin-bottom: 0.35rem; color: var(--text); }
+
+    /* Priority list */
+    .change-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.25rem;
+      margin-bottom: 0.85rem;
+    }
+
+    .change-item .priority {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.4rem;
+    }
+
+    .priority-high   { color: var(--danger); }
+    .priority-medium { color: var(--warning); }
+    .priority-low    { color: var(--text-muted); }
+
+    .change-item h4 { margin: 0 0 0.4rem; color: var(--text); }
+    .change-item p  { margin: 0; font-size: 0.9rem; }
+
+    /* Mermaid */
+    .diagram {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      margin: 1.25rem 0;
+      overflow-x: auto;
+    }
+
+    .mermaid { text-align: center; }
+
+    /* Tree */
+    .tree {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      line-height: 1.7;
+      color: #94a3b8;
+      overflow-x: auto;
+    }
+
+    .tree .dir  { color: #fbbf24; }
+    .tree .file { color: #6ee7b7; }
+
+    ul { margin: 0.5rem 0 0.85rem 1.25rem; color: var(--text-muted); }
+    ul li { margin-bottom: 0.35rem; }
+
+    .meta-footer {
+      margin-top: 3rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    @media (max-width: 860px) {
+      nav.sidebar { display: none; }
+      main { margin-left: 0; padding: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="brand">
+    <h1>ustadji</h1>
+    <p>Architecture Document · v0.1.0</p>
+  </div>
+
+  <div class="section-label">Overview</div>
+  <a href="#overview">Project Overview</a>
+  <a href="#stack">Tech Stack</a>
+  <a href="#structure">Directory Structure</a>
+
+  <div class="section-label">Architecture</div>
+  <a href="#system">System Architecture</a>
+  <a href="#routing">Routing &amp; Pages</a>
+  <a href="#data-flow">Data Flow</a>
+  <a href="#state">State Management</a>
+  <a href="#auth">Authentication</a>
+  <a href="#booking">Booking Flow</a>
+  <a href="#worker">Worker Portal</a>
+
+  <div class="section-label">Integration</div>
+  <a href="#api">API Clients &amp; Endpoints</a>
+  <a href="#external">External Services</a>
+  <a href="#config">Configuration</a>
+
+  <div class="section-label">Roadmap</div>
+  <a href="#issues">Known Gaps</a>
+  <a href="#changes">Recommended Changes</a>
+</nav>
+
+<main>
+
+  <!-- OVERVIEW -->
+  <section id="overview">
+    <h2>Project Overview</h2>
+    <p class="lead">
+      <strong>ustadji</strong> is a home-services marketplace frontend for the Indian market.
+      Customers browse skilled workers (plumbers, electricians, carpenters, etc.), submit service
+      requests, and track bookings. Workers use a separate portal to register, complete
+      Aadhaar-based KYC, and manage their profiles.
+    </p>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="label">Type</div>
+        <div class="value">Frontend-only SPA</div>
+      </div>
+      <div class="card">
+        <div class="label">Framework</div>
+        <div class="value">Next.js 16 App Router</div>
+      </div>
+      <div class="card">
+        <div class="label">Database</div>
+        <div class="value">None (external APIs)</div>
+      </div>
+      <div class="card">
+        <div class="label">Deployment</div>
+        <div class="value">Vercel (implied)</div>
+      </div>
+    </div>
+
+    <div class="alert alert-info">
+      <strong>Key architectural fact</strong>
+      This repository contains <em>only</em> the Next.js frontend. All persistence is handled by
+      two separate REST backends hosted on Render. There are no Next.js API routes, no ORM, and
+      no server-side database in this codebase.
+    </div>
+  </section>
+
+  <!-- STACK -->
+  <section id="stack">
+    <h2>Tech Stack</h2>
+    <table>
+      <thead>
+        <tr><th>Layer</th><th>Technology</th><th>Notes</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Framework</td><td>Next.js 16.2.9</td><td>App Router, Turbopack dev</td></tr>
+        <tr><td>UI</td><td>React 19.2.4 + TypeScript 5</td><td>Client components throughout</td></tr>
+        <tr><td>Styling</td><td>Tailwind CSS v4</td><td><code>@tailwindcss/postcss</code></td></tr>
+        <tr><td>Forms</td><td>react-hook-form + Zod 4</td><td>Validation on auth &amp; worker forms</td></tr>
+        <tr><td>HTTP</td><td>axios</td><td>3 separate client instances</td></tr>
+        <tr><td>Icons</td><td>lucide-react</td><td></td></tr>
+        <tr><td>Toasts</td><td>sonner</td><td>Global in root layout</td></tr>
+        <tr><td>Images</td><td>Cloudinary</td><td>Unsigned upload preset (client-side)</td></tr>
+        <tr><td>Fonts</td><td>Geist / Geist Mono</td><td>via <code>next/font/google</code></td></tr>
+      </tbody>
+    </table>
+
+    <p><strong>Not present:</strong> Redux/Zustand, React Query/SWR, test suite, CI config,
+    Next.js middleware, server actions for data, <code>.env.example</code>.</p>
+  </section>
+
+  <!-- STRUCTURE -->
+  <section id="structure">
+    <h2>Directory Structure</h2>
+    <div class="tree">
+<span class="dir">ustad-ji-2/</span>
+├── <span class="dir">app/</span>                     <span style="color:#64748b"># Next.js App Router pages</span>
+│   ├── layout.tsx             <span style="color:#64748b"># Root layout, providers, Navbar/Footer</span>
+│   ├── page.tsx               <span style="color:#64748b"># Marketing home page</span>
+│   ├── <span class="dir">book-service/</span>          <span style="color:#64748b"># 8-step booking wizard</span>
+│   ├── <span class="dir">dashboard/</span>             <span style="color:#64748b"># Customer request history</span>
+│   ├── <span class="dir">services/</span>              <span style="color:#64748b"># Service catalog + quick request</span>
+│   ├── <span class="dir">login|register|forgot-password/</span>
+│   ├── <span class="dir">profile/</span>               <span style="color:#64748b"># Customer profile (local edits)</span>
+│   ├── <span class="dir">contact|support/</span>
+│   └── <span class="dir">worker/</span>                <span style="color:#64748b"># Worker auth + KYC dashboard</span>
+├── <span class="dir">components/</span>              <span style="color:#64748b"># Reusable UI + booking step components</span>
+│   ├── <span class="dir">service/</span>               <span style="color:#64748b"># Booking wizard steps</span>
+│   ├── ProtectedRoute.tsx
+│   └── WorkerProtectedRoute.tsx
+├── <span class="dir">context/</span>                 <span style="color:#64748b"># React Context providers</span>
+│   ├── AuthContext.tsx
+│   ├── WorkerAuthContext.tsx
+│   └── ServiceBookingContext.tsx
+├── <span class="dir">services/</span>                <span style="color:#64748b"># API client modules</span>
+│   ├── api.ts, serviceApi.ts, workerApi.ts
+├── <span class="dir">lib/</span>
+│   ├── axios.ts               <span style="color:#64748b"># Customer API client + interceptors</span>
+│   ├── auth.ts                <span style="color:#64748b"># Customer localStorage helpers</span>
+│   └── workerAuth.ts          <span style="color:#64748b"># Worker localStorage helpers</span>
+├── <span class="dir">hooks/</span>                   <span style="color:#64748b"># useServices catalog hook</span>
+├── <span class="dir">types/</span>                   <span style="color:#64748b"># TypeScript domain types</span>
+├── <span class="dir">utils/</span>                   <span style="color:#64748b"># priceCalculation.ts</span>
+└── next.config.ts             <span style="color:#64748b"># API proxy rewrites</span>
+    </div>
+  </section>
+
+  <!-- SYSTEM -->
+  <section id="system">
+    <h2>System Architecture</h2>
+    <p>
+      The browser runs a Next.js client application. API calls are proxied through Next.js
+      rewrites to two external Render backends, avoiding CORS issues. Worker KYC images go
+      directly to Cloudinary from the browser.
+    </p>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TB
+  subgraph Browser["Browser — Next.js Client"]
+    Pages["App Pages &amp; Components"]
+    AuthCtx["AuthContext"]
+    WorkerCtx["WorkerAuthContext"]
+    BookingCtx["ServiceBookingContext"]
+    LS[("localStorage")]
+  end
+
+  subgraph NextProxy["Next.js Rewrites"]
+    BE["/backend → Customer API"]
+    WA["/worker-api → Worker/Service API"]
+  end
+
+  subgraph External["External Services"]
+    CustAPI["mistripoint-backend-1.onrender.com"]
+    WorkAPI["mistripoint-1.onrender.com"]
+    Cloud["api.cloudinary.com"]
+  end
+
+  Pages --> AuthCtx &amp; WorkerCtx &amp; BookingCtx
+  AuthCtx --> LS
+  WorkerCtx --> LS
+  BookingCtx --> LS
+
+  AuthCtx -->|lib/axios| BE --> CustAPI
+  Pages -->|serviceApi| WA --> WorkAPI
+  WorkerCtx -->|workerApi| WA --> WorkAPI
+  Pages -->|CloudinaryUpload| Cloud
+      </pre>
+    </div>
+
+    <h3>Application Shell</h3>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TD
+  RL["RootLayout (app/layout.tsx)"]
+  AP["AuthProvider"]
+  WAP["WorkerAuthProvider"]
+  NB["Navbar"]
+  MAIN["&lt;main&gt; page content"]
+  FT["Footer"]
+  TO["Toaster (sonner)"]
+
+  RL --> AP --> WAP
+  WAP --> NB &amp; MAIN &amp; FT &amp; TO
+      </pre>
+    </div>
+  </section>
+
+  <!-- ROUTING -->
+  <section id="routing">
+    <h2>Routing &amp; Pages</h2>
+    <p>File-based routing under <code>app/</code>. Route protection is <strong>client-side only</strong>
+    via <code>ProtectedRoute</code> and <code>WorkerProtectedRoute</code> — there is no
+    <code>middleware.ts</code>.</p>
+
+    <table>
+      <thead>
+        <tr><th>Route</th><th>Guard</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>/</code></td><td><span class="badge badge-gray">Public</span></td><td>Marketing home, featured services, FAQ</td></tr>
+        <tr><td><code>/services</code></td><td><span class="badge badge-gray">Public</span></td><td>Service catalog, search, quick request modal</td></tr>
+        <tr><td><code>/book-service</code></td><td><span class="badge badge-green">Protected</span></td><td>8-step booking wizard</td></tr>
+        <tr><td><code>/login</code>, <code>/register</code>, <code>/forgot-password</code></td><td><span class="badge badge-gray">Public</span></td><td>Customer authentication</td></tr>
+        <tr><td><code>/dashboard</code></td><td><span class="badge badge-green">Protected</span></td><td>Customer service request history</td></tr>
+        <tr><td><code>/profile</code></td><td><span class="badge badge-green">Protected</span></td><td>View/edit customer profile</td></tr>
+        <tr><td><code>/contact</code></td><td><span class="badge badge-yellow">Login to submit</span></td><td>Contact form → creates service request</td></tr>
+        <tr><td><code>/support</code></td><td><span class="badge badge-gray">Public</span></td><td>Help topics and FAQ</td></tr>
+        <tr><td><code>/worker/login</code>, <code>/worker/register</code></td><td><span class="badge badge-gray">Public</span></td><td>Worker authentication</td></tr>
+        <tr><td><code>/worker/dashboard</code></td><td><span class="badge badge-blue">Worker only</span></td><td>KYC onboarding, profile management</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- DATA FLOW -->
+  <section id="data-flow">
+    <h2>Data Flow</h2>
+
+    <h3>Three Axios Clients</h3>
+    <table>
+      <thead>
+        <tr><th>Client</th><th>Base URL</th><th>Auth</th><th>Used For</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>lib/axios.ts</code></td>
+          <td><code>/backend</code></td>
+          <td><code>Bearer {user_id}</code></td>
+          <td>Customer auth, requests, profile fetch</td>
+        </tr>
+        <tr>
+          <td><code>services/workerApi.ts</code></td>
+          <td><code>/worker-api</code></td>
+          <td><code>Bearer {user_id}</code></td>
+          <td>Worker register/login, KYC profile CRUD</td>
+        </tr>
+        <tr>
+          <td><code>services/serviceApi.ts</code></td>
+          <td><code>/worker-api</code></td>
+          <td>None</td>
+          <td><code>GET /services</code> (fallback <code>/skills</code>)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Proxy Configuration</h3>
+    <p>Defined in <code>next.config.ts</code> — rewrites avoid browser CORS blocks:</p>
+    <pre>/backend/:path*   → https://mistripoint-backend-1.onrender.com/:path*
+/worker-api/:path* → ${NEXT_PUBLIC_API_URL || https://mistripoint-1.onrender.com}/:path*</pre>
+
+    <h3>Persistence Layers</h3>
+    <table>
+      <thead>
+        <tr><th>Layer</th><th>What's Stored</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>External APIs</strong></td>
+          <td>Users, service requests, worker profiles, KYC data</td>
+        </tr>
+        <tr>
+          <td><strong>localStorage</strong></td>
+          <td>
+            <code>ustadji_token</code>, <code>ustadji_user</code> (customer)<br>
+            <code>ustadji_worker_token</code>, <code>ustadji_worker_user</code>, <code>ustadji_worker_profile_id</code> (worker)<br>
+            <code>ustadji_booking_addresses</code> (saved addresses)
+          </td>
+        </tr>
+        <tr>
+          <td><strong>React state</strong></td>
+          <td>Booking wizard state, UI modals, form inputs</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- STATE -->
+  <section id="state">
+    <h2>State Management</h2>
+    <p>Three React Context providers — no Redux, Zustand, or data-fetching library.</p>
+
+    <table>
+      <thead>
+        <tr><th>Context</th><th>Scope</th><th>Responsibility</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>AuthContext</code></td>
+          <td>Global (root layout)</td>
+          <td>Customer login/register/logout, user hydration from API + localStorage</td>
+        </tr>
+        <tr>
+          <td><code>WorkerAuthContext</code></td>
+          <td>Global (root layout)</td>
+          <td>Worker login, profile CRUD, KYC approval state</td>
+        </tr>
+        <tr>
+          <td><code>ServiceBookingContext</code></td>
+          <td><code>/book-service</code> only</td>
+          <td>8-step wizard state, step navigation, price calculation</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Booking Wizard Steps</h3>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart LR
+  S1["1. Service"] --> S2["2. Preference"]
+  S2 --> S3["3. Details"]
+  S3 --> S4["4. Slot"]
+  S4 --> S5["5. Summary"]
+  S5 --> S6["6. Address"]
+  S6 --> S7["7. Payment"]
+  S7 --> S8["8. Confirmation"]
+      </pre>
+    </div>
+  </section>
+
+  <!-- AUTH -->
+  <section id="auth">
+    <h2>Authentication</h2>
+    <p>Two <strong>independent</strong> auth systems run in parallel — customer and worker — each
+    with its own localStorage keys and axios interceptors.</p>
+
+    <div class="diagram">
+      <pre class="mermaid">
+sequenceDiagram
+  participant U as User Browser
+  participant C as AuthContext
+  participant LS as localStorage
+  participant API as Customer API (/backend)
+
+  U->>C: login(email, password)
+  C->>API: POST /auth/login
+  API-->>C: { user_id, ... }
+  C->>LS: setToken(user_id), setUser(user)
+  Note over C,API: All requests: Authorization: Bearer {user_id}
+  API-->>C: 401 Unauthorized
+  C->>LS: clearAuthStorage()
+  C->>U: redirect to /login
+      </pre>
+    </div>
+
+    <h3>Customer Auth</h3>
+    <ul>
+      <li>Token stored as <code>ustadji_token</code> — value is the numeric <strong>user_id</strong>, not a JWT</li>
+      <li>Request interceptor attaches <code>Authorization: Bearer {user_id}</code></li>
+      <li>401 responses clear storage and redirect to <code>/login</code></li>
+      <li><code>ProtectedRoute</code> redirects unauthenticated users client-side</li>
+    </ul>
+
+    <h3>Worker Auth</h3>
+    <ul>
+      <li>Separate keys: <code>ustadji_worker_token</code>, <code>ustadji_worker_user</code>, <code>ustadji_worker_profile_id</code></li>
+      <li>401/403 → clear storage, redirect to <code>/worker/login</code></li>
+      <li><code>WorkerProtectedRoute</code> blocks customers (redirects to <code>/dashboard</code>)</li>
+    </ul>
+
+    <div class="alert alert-danger">
+      <strong>Security concern</strong>
+      Using the raw user ID as a bearer token is trivially forgeable if the backend only validates
+      the ID without a signed JWT or session secret. All tokens live in localStorage, which is
+      vulnerable to XSS. There are no httpOnly cookies, refresh tokens, or CSRF protection.
+    </div>
+  </section>
+
+  <!-- BOOKING -->
+  <section id="booking">
+    <h2>Booking Flow</h2>
+
+    <h3>Path A — Quick Request (works end-to-end)</h3>
+    <p>Available on <code>/services</code> and <code>/contact</code>. Submits a simple service
+    request to the backend:</p>
+    <pre>POST /auth/request-service/{userId}
+Body: { service_type, description, address, ... }</pre>
+    <p>These requests appear on the customer <code>/dashboard</code>.</p>
+
+    <h3>Path B — Full Booking Wizard (UI only — critical gap)</h3>
+    <p>The 8-step <code>/book-service</code> flow collects rich booking data (service, preference,
+    slot, address, payment method) but <strong>never calls the backend</strong> on confirmation.</p>
+
+    <div class="alert alert-danger">
+      <strong>Critical gap: OrderConfirmation does not persist bookings</strong>
+      <code>components/service/OrderConfirmation.tsx</code> only shows a success modal and
+      redirects home after 5 seconds. No <code>api.post()</code> is made. Confirmed wizard
+      bookings never reach the server and will not appear on the dashboard.
+    </div>
+
+    <h3>Client-Side Pricing</h3>
+    <p><code>utils/priceCalculation.ts</code> hardcodes INR rates per service/preference. Prices are
+    not fetched from the backend catalog and may drift from actual backend pricing.</p>
+  </section>
+
+  <!-- WORKER -->
+  <section id="worker">
+    <h2>Worker Portal</h2>
+
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TD
+  WR["/worker/register"] --> WL["/worker/login"]
+  WL --> WD["/worker/dashboard"]
+  WD --> KYC{"KYC Status?"}
+  KYC -->|Not started| F1["Step 1: WorkerForm (personal details)"]
+  F1 --> F2["Step 2: CloudinaryUpload (profile + Aadhaar images)"]
+  F2 --> F3["Step 3: Pending / Under Review screen"]
+  KYC -->|Approved| PC["WorkerProfileCard (active profile)"]
+  KYC -->|Rejected| RJ["Rejection screen + re-submit"]
+      </pre>
+    </div>
+
+    <ul>
+      <li>Worker categories are hardcoded in <code>types/worker.ts</code> (<code>WORKER_CATEGORIES</code>)</li>
+      <li>Geolocation is required in production; Mumbai coords used as dev fallback</li>
+      <li>Images uploaded to Cloudinary via unsigned preset (requires env vars)</li>
+      <li><code>getAllWorkers()</code> always returns empty — no marketplace worker listing exists</li>
+    </ul>
+  </section>
+
+  <!-- API -->
+  <section id="api">
+    <h2>API Clients &amp; Endpoints</h2>
+
+    <h3>Customer API (<code>/backend</code>)</h3>
+    <table>
+      <thead><tr><th>Method</th><th>Endpoint</th><th>Used In</th></tr></thead>
+      <tbody>
+        <tr><td>POST</td><td><code>/auth/login</code></td><td>AuthContext</td></tr>
+        <tr><td>POST</td><td><code>/auth/register</code></td><td>AuthContext</td></tr>
+        <tr><td>POST</td><td><code>/auth/forgot-password</code></td><td>AuthContext</td></tr>
+        <tr><td>POST</td><td><code>/auth/reset-password</code></td><td>AuthContext</td></tr>
+        <tr><td>GET</td><td><code>/auth/customers/{userId}</code></td><td>AuthContext (hydration)</td></tr>
+        <tr><td>GET</td><td><code>/auth/my-requests/{userId}</code></td><td>dashboard/page.tsx</td></tr>
+        <tr><td>POST</td><td><code>/auth/request-service/{userId}</code></td><td>services, contact pages</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Worker / Service API (<code>/worker-api</code>)</h3>
+    <table>
+      <thead><tr><th>Method</th><th>Endpoint</th><th>Used In</th></tr></thead>
+      <tbody>
+        <tr><td>POST</td><td><code>/register</code>, <code>/login</code></td><td>workerApi</td></tr>
+        <tr><td>POST</td><td><code>/logout/{userId}</code></td><td>workerApi</td></tr>
+        <tr><td>GET</td><td><code>/profile/{mobile}</code></td><td>workerApi</td></tr>
+        <tr><td>POST/GET/PUT/DELETE</td><td><code>/worker-profile[/{id}]</code></td><td>workerApi</td></tr>
+        <tr><td>GET</td><td><code>/services</code> (fallback <code>/skills</code>)</td><td>serviceApi</td></tr>
+      </tbody>
+    </table>
+
+    <p>All axios clients use a <strong>90-second timeout</strong> to handle Render cold starts,
+    with user-facing "server may be waking up" error messages.</p>
+  </section>
+
+  <!-- EXTERNAL -->
+  <section id="external">
+    <h2>External Services</h2>
+    <table>
+      <thead><tr><th>Service</th><th>URL / Config</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Customer Backend</td>
+          <td><code>mistripoint-backend-1.onrender.com</code></td>
+          <td>Customer auth, service requests</td>
+        </tr>
+        <tr>
+          <td>Worker/Service Backend</td>
+          <td><code>mistripoint-1.onrender.com</code> (or <code>NEXT_PUBLIC_API_URL</code>)</td>
+          <td>Worker auth, profiles, service catalog</td>
+        </tr>
+        <tr>
+          <td>Cloudinary</td>
+          <td><code>NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME</code><br><code>NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET</code></td>
+          <td>Worker KYC image uploads</td>
+        </tr>
+        <tr>
+          <td>Browser Geolocation</td>
+          <td>Native API</td>
+          <td>Worker KYC lat/long on profile submit</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="alert alert-warning">
+      <strong>Legacy naming</strong>
+      Backend URLs use "mistripoint" branding while the frontend is branded "ustadji" — suggests
+      these systems evolved separately and were merged at the frontend layer.
+    </div>
+  </section>
+
+  <!-- CONFIG -->
+  <section id="config">
+    <h2>Configuration</h2>
+
+    <h3>Environment Variables</h3>
+    <table>
+      <thead><tr><th>Variable</th><th>Required</th><th>Default / Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>NEXT_PUBLIC_API_URL</code></td>
+          <td>Optional</td>
+          <td>Falls back to <code>https://mistripoint-1.onrender.com</code></td>
+        </tr>
+        <tr>
+          <td><code>NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME</code></td>
+          <td>Yes (worker KYC)</td>
+          <td>Upload fails without it</td>
+        </tr>
+        <tr>
+          <td><code>NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET</code></td>
+          <td>Yes (worker KYC)</td>
+          <td>Unsigned upload preset</td>
+        </tr>
+        <tr>
+          <td><code>NODE_ENV</code></td>
+          <td>Auto</td>
+          <td><code>development</code> enables Mumbai geolocation fallback</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="alert alert-warning">
+      <strong>Missing: <code>.env.example</code></strong>
+      No environment template exists in the repo. New developers must discover required vars
+      from source code. The README is still the default create-next-app boilerplate.
+    </div>
+
+    <h3>npm Scripts</h3>
+    <pre>npm run dev     # next dev (Turbopack)
+npm run build   # next build
+npm run start   # next start
+npm run lint    # eslint</pre>
+  </section>
+
+  <!-- ISSUES -->
+  <section id="issues">
+    <h2>Known Gaps &amp; Issues</h2>
+
+    <table>
+      <thead><tr><th>Area</th><th>Issue</th><th>Impact</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Booking</td>
+          <td>8-step wizard has no backend persistence</td>
+          <td><span class="badge badge-red">Critical</span></td>
+        </tr>
+        <tr>
+          <td>Auth</td>
+          <td>User ID used as bearer token in localStorage</td>
+          <td><span class="badge badge-red">Critical</span></td>
+        </tr>
+        <tr>
+          <td>Profile</td>
+          <td><code>updateUser()</code> only updates localStorage, no API call</td>
+          <td><span class="badge badge-red">High</span></td>
+        </tr>
+        <tr>
+          <td>Architecture</td>
+          <td>Two separate backends for customer vs worker</td>
+          <td><span class="badge badge-yellow">Medium</span></td>
+        </tr>
+        <tr>
+          <td>Pricing</td>
+          <td>Hardcoded client-side rates, not from API</td>
+          <td><span class="badge badge-yellow">Medium</span></td>
+        </tr>
+        <tr>
+          <td>Addresses</td>
+          <td>Saved only in localStorage, not synced to profile API</td>
+          <td><span class="badge badge-yellow">Medium</span></td>
+        </tr>
+        <tr>
+          <td>Route guards</td>
+          <td>Client-only — protected pages flash before redirect</td>
+          <td><span class="badge badge-yellow">Medium</span></td>
+        </tr>
+        <tr>
+          <td>Marketplace</td>
+          <td>No worker listing or matching for customers</td>
+          <td><span class="badge badge-yellow">Medium</span></td>
+        </tr>
+        <tr>
+          <td>Data fetching</td>
+          <td>No shared cache — each page re-fetches services independently</td>
+          <td><span class="badge badge-gray">Low</span></td>
+        </tr>
+        <tr>
+          <td>Testing</td>
+          <td>No unit, integration, or E2E tests</td>
+          <td><span class="badge badge-gray">Low</span></td>
+        </tr>
+        <tr>
+          <td>Docs</td>
+          <td>README is boilerplate; no <code>.env.example</code></td>
+          <td><span class="badge badge-gray">Low</span></td>
+        </tr>
+        <tr>
+          <td>Code quality</td>
+          <td>Duplicate <code>"use client"</code> in OrderConfirmation.tsx</td>
+          <td><span class="badge badge-gray">Low</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- CHANGES -->
+  <section id="changes">
+    <h2>Recommended Changes</h2>
+    <p>Prioritized roadmap to move ustadji from a UI prototype toward a production-ready marketplace.</p>
+
+    <h3>Phase 1 — Critical (make core flows work)</h3>
+
+    <div class="change-item">
+      <div class="priority priority-high">Priority: Critical</div>
+      <h4>1. Wire booking wizard to the backend</h4>
+      <p>
+        Add a <code>POST</code> call in the payment/confirmation step (e.g. extend
+        <code>/auth/request-service/{userId}</code> or add a new <code>/bookings</code> endpoint)
+        with the full wizard payload: service, preference, booking type, slot, address, and amount.
+        Update <code>OrderConfirmation.tsx</code> to submit before showing success. Ensure confirmed
+        bookings appear on <code>/dashboard</code>.
+      </p>
+    </div>
+
+    <div class="change-item">
+      <div class="priority priority-high">Priority: Critical</div>
+      <h4>2. Fix authentication model</h4>
+      <p>
+        Replace user-ID-as-token with proper JWT or session tokens issued by the backend. Move
+        tokens to httpOnly cookies via a Next.js BFF layer (<code>app/api/</code> routes) to
+        eliminate XSS token theft. Add token refresh and CSRF protection.
+      </p>
+    </div>
+
+    <div class="change-item">
+      <div class="priority priority-high">Priority: Critical</div>
+      <h4>3. Sync profile updates to the backend</h4>
+      <p>
+        <code>app/profile/page.tsx</code> currently calls <code>updateUser()</code> which only
+        writes to localStorage. Add a <code>PUT /auth/customers/{userId}</code> (or equivalent)
+        API call so profile edits persist across sessions and devices.
+      </p>
+    </div>
+
+    <h3>Phase 2 — Architecture (stabilize &amp; unify)</h3>
+
+    <div class="change-item">
+      <div class="priority priority-medium">Priority: Medium</div>
+      <h4>4. Add a Backend-for-Frontend (BFF) layer</h4>
+      <p>
+        Create <code>app/api/</code> route handlers that proxy to one or both backends. This
+        centralizes auth, hides backend URLs, enables server-side session management, and provides
+        a single API surface for the frontend. Long-term: consolidate the two Render backends
+        into one service.
+      </p>
+    </div>
+
+    <div class="change-item">
+      <div class="priority priority-medium">Priority: Medium</div>
+      <h4>5. Add Next.js middleware for route protection</h4>
+      <p>
+        Create <code>middleware.ts</code> to check auth cookies server-side before rendering
+        protected pages. Eliminates the flash-of-unauthenticated-content and enables SSR with
+        user context.
+      </p>
+    </div>
+
+    <div class="change-item">
+      <div class="priority priority-medium">Priority: Medium</div>
+      <h4>6. Unify booking paths</h4>
+      <p>
+        Merge the "Quick Request" modal and the full booking wizard into a single coherent flow.
+        Quick request could become a simplified step-1 shortcut that feeds into the same backend
+        endpoint and dashboard view.
+      </p>
+    </div>
+
+    <div class="change-item">
+      <div class="priority priority-medium">Priority: Medium</div>
+      <h4>7. Server-driven pricing and addresses</h4>
+      <p>
+        Fetch service rates from the backend catalog instead of hardcoding in
+        <code>priceCalculation.ts</code>. Persist customer addresses via the profile API
+        instead of localStorage only.
+      </p>
+    </div>
+
+    <h3>Phase 3 — Product &amp; Quality</h3>
+
+    <div class="change-item">
+      <div class="priority priority-medium">Priority: Medium</div>
+      <h4>8. Add worker marketplace listing</h4>
+      <p>
+        Implement customer-facing worker search/browse (the <code>getAllWorkers()</code> stub
+        currently returns empty). Connect approved workers to incoming service requests for
+        matching and assignment.
+      </p>
+    </div>
+
+    <div class="change-item">
+      <div class="priority priority-medium">Priority: Medium</div>
+      <h4>9. Adopt React Query or SWR</h4>
+      <p>
+        Replace ad-hoc <code>useServices()</code> calls with a data-fetching library for
+        caching, deduplication, background refresh, and consistent loading/error states across
+        home, services, and booking pages.
+      </p>
+    </div>
+
+    <div class="change-item">
+      <div class="priority priority-low">Priority: Low</div>
+      <h4>10. Developer experience improvements</h4>
+      <p>
+        Replace boilerplate README with project docs. Add <code>.env.example</code>. Add ESLint
+        CI, unit tests for utilities, and E2E tests for auth and booking flows. Fix duplicate
+        <code>"use client"</code> directive in OrderConfirmation.tsx.
+      </p>
+    </div>
+
+    <h3>Target Architecture (future state)</h3>
+    <div class="diagram">
+      <pre class="mermaid">
+flowchart TB
+  subgraph Browser["Browser"]
+    App["Next.js App (Client Components)"]
+  end
+
+  subgraph NextServer["Next.js Server"]
+    MW["middleware.ts (auth guard)"]
+    BFF["app/api/ routes (BFF)"]
+    Cookies["httpOnly session cookies"]
+  end
+
+  subgraph Backend["Unified Backend API"]
+    Auth["Auth (JWT/sessions)"]
+    Bookings["Bookings &amp; Requests"]
+    Workers["Worker Profiles &amp; KYC"]
+    Catalog["Service Catalog &amp; Pricing"]
+  end
+
+  App --> MW
+  MW --> BFF
+  BFF --> Cookies
+  BFF --> Auth &amp; Bookings &amp; Workers &amp; Catalog
+      </pre>
+    </div>
+  </section>
+
+  <div class="meta-footer">
+    Generated for ustadji v0.1.0 · Next.js 16.2.9 · Last updated July 2026<br>
+    Open this file directly in a browser: <code>docs/architecture.html</code>
+  </div>
+
+</main>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: "dark",
+    themeVariables: {
+      primaryColor: "#1a2332",
+      primaryTextColor: "#e8edf4",
+      primaryBorderColor: "#2d3f56",
+      lineColor: "#10b981",
+      secondaryColor: "#243044",
+      tertiaryColor: "#0f1419",
+      fontFamily: "Segoe UI, system-ui, sans-serif"
+    },
+    flowchart: { curve: "basis" }
+  });
+
+  // Highlight active nav link on scroll
+  const sections = document.querySelectorAll("section[id]");
+  const navLinks = document.querySelectorAll("nav.sidebar a");
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          navLinks.forEach((link) => link.classList.remove("active"));
+          const active = document.querySelector(`nav.sidebar a[href="#${entry.target.id}"]`);
+          if (active) active.classList.add("active");
+        }
+      });
+    },
+    { rootMargin: "-20% 0px -70% 0px" }
+  );
+
+  sections.forEach((s) => observer.observe(s));
+</script>
+
+</body>
+</html>
