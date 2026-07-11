@@ -8,12 +8,19 @@ export interface ServicePreference {
 
 export type BookingType = "full_time" | "hourly";
 
+export const ADDRESSES_STORAGE_KEY = "ustadji_booking_addresses";
+
+export function getAddressesStorageKey(userId?: number | null): string {
+  return userId ? `${ADDRESSES_STORAGE_KEY}_${userId}` : ADDRESSES_STORAGE_KEY;
+}
+
 export interface BookingAddress {
   id: string;
   fullName: string;
   phone: string;
   address: string;
   city: string;
+  state?: string;
   pincode: string;
 }
 
@@ -70,5 +77,3 @@ export const TIME_SLOTS: string[] = [
   "06:00 PM",
   "07:00 PM",
 ];
-
-export const ADDRESSES_STORAGE_KEY = "ustadji_booking_addresses";

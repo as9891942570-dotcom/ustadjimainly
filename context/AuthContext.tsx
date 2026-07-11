@@ -135,7 +135,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const register = useCallback(async (payload: RegisterPayload) => {
-    const { data } = await api.post<RegisterResponse>("/auth/register", payload);
+    const { state, ...apiPayload } = payload;
+    void state;
+    const { data } = await api.post<RegisterResponse>("/auth/register", apiPayload);
 
     const newUser: User = {
       id: data.id,
@@ -143,6 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       lastName: payload.last_name,
       mobile: payload.mobile,
       city: payload.city,
+      state: payload.state,
       address: payload.address,
       pincode: payload.pincode,
     };

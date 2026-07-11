@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import ProfileCard from "@/components/ProfileCard";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import Modal from "@/components/Modal";
+import LocationSelect from "@/components/LocationSelect";
 import { useAuth } from "@/context/AuthContext";
 import { User } from "@/types/user";
 import { LogOut, Headphones, MapPin, Pencil, User as UserIcon } from "lucide-react";
@@ -22,6 +23,7 @@ const editSchema = z.object({
     .string()
     .min(1, "Mobile is required")
     .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number"),
+  state: z.string().min(1, "State is required"),
   city: z.string().min(1, "City is required"),
   address: z.string().min(1, "Address is required"),
   pincode: z
@@ -39,6 +41,7 @@ function ProfileContent() {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
     reset,
   } = useForm<EditFormData>({
@@ -48,6 +51,7 @@ function ProfileContent() {
           firstName: user.firstName || (user.name ? user.name.trim().split(/\s+/)[0] : "") || "",
           lastName: user.lastName || (user.name ? user.name.trim().split(/\s+/).slice(1).join(" ") : "") || "",
           mobile: user.mobile || "",
+          state: user.state || "",
           city: user.city || "",
           address: user.address || "",
           pincode: user.pincode || "",
@@ -64,6 +68,7 @@ function ProfileContent() {
       lastName: data.lastName,
       name: `${data.firstName} ${data.lastName}`.trim(),
       mobile: data.mobile,
+      state: data.state,
       city: data.city,
       address: data.address,
       pincode: data.pincode,
@@ -78,6 +83,7 @@ function ProfileContent() {
       firstName: user.firstName || (user.name ? user.name.trim().split(/\s+/)[0] : "") || "",
       lastName: user.lastName || (user.name ? user.name.trim().split(/\s+/).slice(1).join(" ") : "") || "",
       mobile: user.mobile || "",
+      state: user.state || "",
       city: user.city || "",
       address: user.address || "",
       pincode: user.pincode || "",
@@ -89,6 +95,7 @@ function ProfileContent() {
     { label: "First Name", value: user.firstName || (user.name ? user.name.trim().split(/\s+/)[0] : "") || "—" },
     { label: "Last Name", value: user.lastName || (user.name ? user.name.trim().split(/\s+/).slice(1).join(" ") : "") || "—" },
     { label: "Mobile", value: user.mobile || "—" },
+    { label: "State", value: user.state || "—" },
     { label: "City", value: user.city || "—" },
   ];
 
@@ -184,7 +191,26 @@ function ProfileContent() {
             <Input label="Last Name" error={errors.lastName?.message} {...register("lastName")} />
           </div>
           <Input label="Mobile" error={errors.mobile?.message} {...register("mobile")} />
-          <Input label="City" error={errors.city?.message} {...register("city")} />
+          <Controller
+            name="state"
+            control={control}
+            render={({ field: stateField }) => (
+              <Controller
+                name="city"
+                control={control}
+                render={({ field: cityField }) => (
+                  <LocationSelect
+                    state={stateField.value}
+                    city={cityField.value}
+                    onStateChange={stateField.onChange}
+                    onCityChange={cityField.onChange}
+                    stateError={errors.state?.message}
+                    cityError={errors.city?.message}
+                  />
+                )}
+              />
+            )}
+          />
           <Input label="Address" error={errors.address?.message} {...register("address")} />
           <Input label="Pincode" error={errors.pincode?.message} {...register("pincode")} />
           <div className="flex gap-3 pt-2">

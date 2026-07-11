@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertCircle, RefreshCw, Search } from "lucide-react";
+import { AlertCircle, ArrowLeft, RefreshCw, Search } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import ServiceCard from "@/components/ServiceCard";
 import Button from "@/components/Button";
@@ -53,11 +54,19 @@ export default function ServiceSelection() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-gray-900">Select a Service</h2>
-        <p className="mt-1 text-sm text-gray-600">
-          Choose the service you want to book
-        </p>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Select a Service</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Choose the service you want to book
+          </p>
+        </div>
+        <Link href="/services">
+          <Button variant="secondary" size="sm">
+            <ArrowLeft className="h-4 w-4" />
+            Cancel
+          </Button>
+        </Link>
       </div>
 
       <div className="relative mb-6 max-w-md">

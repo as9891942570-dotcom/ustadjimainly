@@ -6,6 +6,7 @@ export interface User {
   mobile: string;
   email?: string;
   city?: string;
+  state?: string;
   address?: string;
   pincode?: string;
   role?: string;
@@ -24,6 +25,7 @@ export interface RegisterPayload {
   city: string;
   address: string;
   pincode: string;
+  state?: string;
 }
 
 export interface LoginResponse {
@@ -49,16 +51,23 @@ export interface ServiceRequest {
   worker_type: string;
   problem: string;
   status: string;
+  user_id?: number;
+  created_at?: string;
+  booking_date?: string;
+  booking_time?: string;
+  address?: string;
+  city?: string;
+  pincode?: string;
+  amount?: number | string;
+  [key: string]: unknown;
 }
 
 export interface ForgotPasswordPayload {
-  mobile?: string;
-  email?: string;
+  mobile: string;
 }
 
 export interface ResetPasswordPayload {
-  mobile?: string;
-  email?: string;
+  mobile: string;
   password: string;
 }
 

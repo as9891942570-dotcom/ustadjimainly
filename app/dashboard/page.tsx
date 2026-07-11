@@ -4,18 +4,40 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Button from "@/components/Button";
+import Modal from "@/components/Modal";
 import { SkeletonCard } from "@/components/Loader";
 import { useAuth } from "@/context/AuthContext";
 import api, { getApiErrorMessage } from "@/lib/axios";
 import { ServiceRequest } from "@/types/user";
-import { ClipboardList, Clock, Plus, Wrench } from "lucide-react";
+import { ChevronRight, ClipboardList, Clock, Plus, Wrench } from "lucide-react";
 import { toast } from "sonner";
+
+function normalizeRequests(data: unknown): ServiceRequest[] {
+  if (Array.isArray(data)) return data as ServiceRequest[];
+  if (data && typeof data === "object") {
+    const obj = data as Record<string, unknown>;
+    for (const key of ["requests", "data", "results", "value", "bookings"]) {
+      if (Array.isArray(obj[key])) return obj[key] as ServiceRequest[];
+    }
+  }
+  return [];
+}
+
+function getRequestId(req: ServiceRequest, index: number): string | number {
+  return (
+    req.request_id ??
+    (req as { id?: number }).id ??
+    (req as { booking_id?: number }).booking_id ??
+    index
+  );
+}
 
 function DashboardContent() {
   const { user } = useAuth();
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
 
   useEffect(() => {
     const fetchRequests = async () => {
@@ -23,10 +45,18 @@ function DashboardContent() {
       setIsLoading(true);
       setError(null);
       try {
-        const { data } = await api.get<ServiceRequest[]>(
-          `/auth/my-requests/${user.id}`
-        );
-        setRequests(Array.isArray(data) ? data : []);
+        const { data } = await api.get<unknown>(`/auth/my-requests/${user.id}`);
+        const all = normalizeRequests(data);
+        // Keep only this user's requests when the API includes a user_id field
+        const mine = all.filter((req) => {
+          const ownerId =
+            req.user_id ??
+            (req as { customer_id?: number }).customer_id ??
+            (req as { userId?: number }).userId;
+          if (ownerId == null) return true;
+          return Number(ownerId) === Number(user.id);
+        });
+        setRequests(mine);
       } catch (err) {
         const msg = getApiErrorMessage(err, "Failed to load requests");
         setError(msg);
@@ -52,6 +82,23 @@ function DashboardContent() {
     }
   };
 
+  const formatDetailDate = (req: ServiceRequest) => {
+    const raw =
+      req.booking_date ||
+      req.created_at ||
+      (req as { date?: string }).date ||
+      (req as { scheduled_date?: string }).scheduled_date;
+    if (!raw || typeof raw !== "string") return null;
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return raw;
+    return parsed.toLocaleDateString("en-IN", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
   return (
     <div className="px-4 py-12 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-5xl">
@@ -59,7 +106,11 @@ function DashboardContent() {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">Dashboard</h1>
             <p className="mt-1 text-gray-600">
-              Welcome back, {user?.firstName || (user?.name ? user.name.trim().split(/\s+/)[0] : "") || "User"}! Manage your service requests here.
+              Welcome back,{" "}
+              {user?.firstName ||
+                (user?.name ? user.name.trim().split(/\s+/)[0] : "") ||
+                "User"}
+              ! Manage your service requests here.
             </p>
           </div>
           <Link href="/book-service">
@@ -70,7 +121,6 @@ function DashboardContent() {
           </Link>
         </div>
 
-        {/* Stats */}
         <div className="mb-8 grid gap-4 sm:grid-cols-3">
           <div className="rounded-xl border border-white/40 bg-white/70 p-5 backdrop-blur-md">
             <div className="flex items-center gap-3">
@@ -111,7 +161,6 @@ function DashboardContent() {
           </div>
         </div>
 
-        {/* Requests list */}
         <div className="rounded-xl border border-white/40 bg-white/70 p-6 shadow-sm backdrop-blur-md">
           <h2 className="mb-6 text-lg font-bold text-gray-900">My Service Requests</h2>
 
@@ -140,35 +189,125 @@ function DashboardContent() {
               <p className="mt-1 text-sm text-gray-500">
                 Book your first service to get started
               </p>
-              <Link href="/services" className="mt-4 inline-block">
-                <Button size="sm">Browse Services</Button>
+              <Link href="/book-service" className="mt-4 inline-block">
+                <Button size="sm">Book a Service</Button>
               </Link>
             </div>
           ) : (
             <div className="space-y-4">
-              {requests.map((req) => (
-                <div
-                  key={req.request_id}
-                  className="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-5 transition hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div>
-                    <div className="mb-1 flex items-center gap-2">
-                      <span className="font-semibold text-gray-900">{req.worker_type}</span>
-                      <span
-                        className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColor(req?.status)}`}
-                      >
-                        {req?.status ?? "-"}
-                      </span>
+              {requests.map((req, index) => {
+                const id = getRequestId(req, index);
+                const dateLabel = formatDetailDate(req);
+                return (
+                  <button
+                    key={String(id)}
+                    type="button"
+                    onClick={() => setSelectedRequest(req)}
+                    className="flex w-full flex-col gap-3 rounded-xl border border-gray-100 bg-white p-5 text-left transition hover:border-emerald-200 hover:shadow-md sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-gray-900">
+                          {req.worker_type || "Service Request"}
+                        </span>
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColor(req?.status)}`}
+                        >
+                          {req?.status ?? "-"}
+                        </span>
+                      </div>
+                      <p className="line-clamp-2 text-sm text-gray-600">{req.problem}</p>
+                      <p className="mt-1 text-xs text-gray-400">
+                        Request #{id}
+                        {dateLabel ? ` · ${dateLabel}` : ""}
+                      </p>
                     </div>
-                    <p className="text-sm text-gray-600">{req.problem}</p>
-                    <p className="mt-1 text-xs text-gray-400">Request #{req.request_id}</p>
-                  </div>
-                </div>
-              ))}
+                    <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
       </div>
+
+      <Modal
+        isOpen={!!selectedRequest}
+        onClose={() => setSelectedRequest(null)}
+        title="Request Details"
+      >
+        {selectedRequest && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-lg font-bold text-gray-900">
+                {selectedRequest.worker_type || "Service Request"}
+              </h3>
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${statusColor(selectedRequest.status)}`}
+              >
+                {selectedRequest.status ?? "-"}
+              </span>
+            </div>
+
+            <dl className="space-y-3 text-sm">
+              <div className="flex justify-between gap-4 border-b border-gray-100 pb-2">
+                <dt className="text-gray-500">Request ID</dt>
+                <dd className="font-medium text-gray-900">
+                  #{getRequestId(selectedRequest, 0)}
+                </dd>
+              </div>
+              {formatDetailDate(selectedRequest) && (
+                <div className="flex justify-between gap-4 border-b border-gray-100 pb-2">
+                  <dt className="text-gray-500">Booking Date</dt>
+                  <dd className="font-medium text-gray-900">
+                    {formatDetailDate(selectedRequest)}
+                  </dd>
+                </div>
+              )}
+              {(selectedRequest.booking_time ||
+                (selectedRequest as { time?: string }).time) && (
+                <div className="flex justify-between gap-4 border-b border-gray-100 pb-2">
+                  <dt className="text-gray-500">Time</dt>
+                  <dd className="font-medium text-gray-900">
+                    {String(
+                      selectedRequest.booking_time ||
+                        (selectedRequest as { time?: string }).time
+                    )}
+                  </dd>
+                </div>
+              )}
+              <div className="border-b border-gray-100 pb-2">
+                <dt className="mb-1 text-gray-500">Details</dt>
+                <dd className="font-medium text-gray-900 whitespace-pre-wrap">
+                  {selectedRequest.problem || "—"}
+                </dd>
+              </div>
+              {(selectedRequest.address || selectedRequest.city) && (
+                <div className="border-b border-gray-100 pb-2">
+                  <dt className="mb-1 text-gray-500">Address</dt>
+                  <dd className="font-medium text-gray-900">
+                    {[selectedRequest.address, selectedRequest.city, selectedRequest.pincode]
+                      .filter(Boolean)
+                      .join(", ")}
+                  </dd>
+                </div>
+              )}
+              {selectedRequest.amount != null && selectedRequest.amount !== "" && (
+                <div className="flex justify-between gap-4">
+                  <dt className="text-gray-500">Amount</dt>
+                  <dd className="font-medium text-gray-900">
+                    {String(selectedRequest.amount)}
+                  </dd>
+                </div>
+              )}
+            </dl>
+
+            <Button className="w-full" onClick={() => setSelectedRequest(null)}>
+              Close
+            </Button>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

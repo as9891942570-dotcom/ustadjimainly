@@ -82,6 +82,7 @@ export function mapApiCustomerToUser(
     mobile: customer?.phone || extras?.mobile || "",
     email: customer?.email ?? "",
     city: extras?.city ?? "",
+    state: extras?.state ?? "",
     address: extras?.address ?? "",
     pincode: extras?.pincode ?? "",
     role: customer?.role ?? "",

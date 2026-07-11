@@ -1,10 +1,8 @@
 "use client";
 
-"use client";
-
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2, Home, MapPin } from "lucide-react";
+import { CheckCircle2, LayoutDashboard, MapPin } from "lucide-react";
 import Button from "@/components/Button";
 import Modal from "@/components/Modal";
 import { formatCurrency } from "@/utils/priceCalculation";
@@ -26,29 +24,30 @@ export default function OrderConfirmation() {
   } = useServiceBooking();
 
   const [showSuccessPopup, setShowSuccessPopup] = useState(true);
-  const redirectTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasRedirectedRef = useRef(false);
 
-  const handleGoHome = () => {
+  const handleGoToDashboard = () => {
     if (hasRedirectedRef.current) return;
     hasRedirectedRef.current = true;
     if (redirectTimerRef.current) {
       clearTimeout(redirectTimerRef.current);
     }
     resetBooking();
-    router.push("/");
+    router.push("/dashboard");
   };
 
   useEffect(() => {
     redirectTimerRef.current = setTimeout(() => {
-      handleGoHome();
-    }, 5000);
+      handleGoToDashboard();
+    }, 8000);
 
     return () => {
       if (redirectTimerRef.current) {
         clearTimeout(redirectTimerRef.current);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const formattedDate = selectedDate
@@ -65,19 +64,22 @@ export default function OrderConfirmation() {
       <Modal
         isOpen={showSuccessPopup}
         onClose={() => setShowSuccessPopup(false)}
-        title="Order Confirmed"
+        title="Booking Confirmed"
       >
         <div className="flex flex-col items-center py-6 text-center">
           <div className="mb-4 rounded-full bg-emerald-100 p-3 text-emerald-600">
             <CheckCircle2 className="h-10 w-10" />
           </div>
-          <h3 className="text-lg font-bold text-gray-900">Order Confirmed</h3>
+          <h3 className="text-lg font-bold text-gray-900">Booking Confirmed</h3>
           <p className="mt-2 text-sm text-gray-600">
-            Your booking has been confirmed successfully.
+            Your service request was submitted successfully. You can track it on your dashboard.
           </p>
           <p className="mt-4 text-xs text-gray-400">
-            Redirecting to Home page in 5 seconds...
+            Redirecting to Dashboard in a few seconds...
           </p>
+          <Button className="mt-6" onClick={handleGoToDashboard}>
+            View My Bookings
+          </Button>
         </div>
       </Modal>
 
@@ -85,7 +87,7 @@ export default function OrderConfirmation() {
         <CheckCircle2 className="h-12 w-12 text-emerald-600" />
       </div>
 
-      <h2 className="text-2xl font-bold text-gray-900">Order Confirmed</h2>
+      <h2 className="text-2xl font-bold text-gray-900">Booking Confirmed</h2>
       <p className="mt-2 text-gray-600">
         Your booking has been placed successfully. Pay cash to the professional on
         arrival.
@@ -140,21 +142,22 @@ export default function OrderConfirmation() {
           <div className="mt-4 rounded-xl bg-gray-50 p-4">
             <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-900">
               <MapPin className="h-4 w-4 text-emerald-600" />
-              Delivery Address
+              Service Address
             </div>
             <p className="text-sm text-gray-700">{selectedAddress.fullName}</p>
             <p className="text-sm text-gray-600">{selectedAddress.phone}</p>
             <p className="text-sm text-gray-600">
-              {selectedAddress.address}, {selectedAddress.city} -{" "}
+              {selectedAddress.address}, {selectedAddress.city}
+              {selectedAddress.state ? `, ${selectedAddress.state}` : ""} -{" "}
               {selectedAddress.pincode}
             </p>
           </div>
         )}
       </div>
 
-      <Button size="lg" onClick={handleGoHome} className="mt-8">
-        <Home className="h-5 w-5" />
-        Go To Home
+      <Button size="lg" onClick={handleGoToDashboard} className="mt-8">
+        <LayoutDashboard className="h-5 w-5" />
+        Go To Dashboard
       </Button>
     </div>
   );

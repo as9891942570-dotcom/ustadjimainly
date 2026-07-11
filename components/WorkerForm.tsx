@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState } from "react";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Input from "@/components/Input";
 import Button from "@/components/Button";
+import LocationSelect from "@/components/LocationSelect";
+import { fetchSkills } from "@/services/serviceApi";
 import {
   WORKER_CATEGORIES,
   WorkerCreatePayload,
@@ -34,7 +36,7 @@ const workerFormSchema = z.object({
     .number()
     .min(0, "Experience cannot be negative")
     .max(60, "Enter a valid experience"),
-  skills: z.string().min(1, "Skills are required"),
+  skills: z.string().min(1, "Select at least one skill"),
   about: z.string().min(1, "Description is required"),
   aadhaar_number: z
     .string()
@@ -85,6 +87,14 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
+function parseSkills(skills?: string): string[] {
+  if (!skills) return [];
+  return skills
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 function toFormDefaults(
   profile?: WorkerProfile | null,
   defaultMobile?: string
@@ -115,6 +125,13 @@ function toFormDefaults(
   };
 }
 
+function capitalizeSkill(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : ""))
+    .join(" ");
+}
+
 export default function WorkerForm({
   initialData,
   defaultMobile,
@@ -125,16 +142,57 @@ export default function WorkerForm({
   excludeImages = false,
 }: WorkerFormProps) {
   const [imagePreview, setImagePreview] = useState(initialData?.profile_image ?? "");
+  const [skillOptions, setSkillOptions] = useState<string[]>([]);
+  const [skillsLoading, setSkillsLoading] = useState(true);
 
   const {
     register,
     handleSubmit,
     setValue,
+    control,
+    watch,
     formState: { errors },
   } = useForm<WorkerFormData>({
     resolver: zodResolver(workerFormSchema),
     defaultValues: toFormDefaults(initialData, defaultMobile),
   });
+
+  const selectedSkills = parseSkills(watch("skills"));
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      setSkillsLoading(true);
+      try {
+        const skills = await fetchSkills();
+        if (cancelled) return;
+        const names = skills.map((s) => capitalizeSkill(s.skill_name));
+        const unique = Array.from(new Set(names));
+        const existing = parseSkills(initialData?.skills);
+        setSkillOptions(Array.from(new Set([...unique, ...existing])));
+      } catch {
+        if (!cancelled) {
+          setSkillOptions(
+            WORKER_CATEGORIES.map((c) => c.label).concat(parseSkills(initialData?.skills))
+          );
+        }
+      } finally {
+        if (!cancelled) setSkillsLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialData?.skills]);
+
+  const toggleSkill = (skill: string) => {
+    const current = parseSkills(watch("skills"));
+    const next = current.includes(skill)
+      ? current.filter((s) => s !== skill)
+      : [...current, skill];
+    setValue("skills", next.join(", "), { shouldValidate: true });
+  };
 
   const handleImageChange = async (
     field: "profile_image" | "aadhaar_front" | "aadhaar_back",
@@ -224,11 +282,28 @@ export default function WorkerForm({
 
       <Input label="Address" error={errors.address?.message} {...register("address")} />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Input label="City" error={errors.city?.message} {...register("city")} />
-        <Input label="State" error={errors.state?.message} {...register("state")} />
-        <Input label="Pincode" error={errors.pincode?.message} {...register("pincode")} />
-      </div>
+      <Controller
+        name="state"
+        control={control}
+        render={({ field: stateField }) => (
+          <Controller
+            name="city"
+            control={control}
+            render={({ field: cityField }) => (
+              <LocationSelect
+                state={stateField.value}
+                city={cityField.value}
+                onStateChange={stateField.onChange}
+                onCityChange={cityField.onChange}
+                stateError={errors.state?.message}
+                cityError={errors.city?.message}
+              />
+            )}
+          />
+        )}
+      />
+
+      <Input label="Pincode" error={errors.pincode?.message} {...register("pincode")} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="w-full">
@@ -262,7 +337,37 @@ export default function WorkerForm({
         />
       </div>
 
-      <Input label="Skills" placeholder="Plumbing, Electrical, etc." error={errors.skills?.message} {...register("skills")} />
+      <div className="w-full">
+        <label className="mb-1.5 block text-sm font-medium text-gray-700">Skills</label>
+        {skillsLoading ? (
+          <p className="text-sm text-gray-500">Loading skills...</p>
+        ) : (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {skillOptions.map((skill) => {
+              const checked = selectedSkills.includes(skill);
+              return (
+                <label
+                  key={skill}
+                  className={`flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-sm transition ${
+                    checked
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-800"
+                      : "border-gray-200 bg-white/80 text-gray-700 hover:border-emerald-300"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                    checked={checked}
+                    onChange={() => toggleSkill(skill)}
+                  />
+                  {skill}
+                </label>
+              );
+            })}
+          </div>
+        )}
+        {errors.skills && <p className="mt-1.5 text-sm text-red-500">{errors.skills.message}</p>}
+      </div>
 
       <div className="w-full">
         <label htmlFor="about" className="mb-1.5 block text-sm font-medium text-gray-700">

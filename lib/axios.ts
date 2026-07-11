@@ -38,9 +38,16 @@ api.interceptors.response.use(
 
 export function getApiErrorMessage(error: unknown, fallback = "Something went wrong"): string {
   if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
     const data = error.response?.data as
       | { detail?: string | { msg?: string }[]; message?: string }
       | undefined;
+
+    if (status === 404) {
+      if (typeof data?.detail === "string" && data.detail.toLowerCase() === "not found") {
+        return "The requested resource was not found. Please check your details and try again.";
+      }
+    }
 
     if (data?.message) return data.message;
 

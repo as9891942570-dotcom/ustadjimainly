@@ -193,6 +193,13 @@ export async function fetchServices(): Promise<Service[]> {
   return mapSkillsToServices(skills);
 }
 
+export async function fetchSkills(): Promise<{ id: number; skill_name: string }[]> {
+  const { data } = await serviceApiClient.get<unknown>("/skills");
+  return unwrapList<{ id: number; skill_name: string }>(data).filter(
+    (s) => s && typeof s.skill_name === "string"
+  );
+}
+
 export async function fetchServiceById(serviceId: string): Promise<Service | null> {
   const services = await fetchServices();
   return services.find((service) => service.id === serviceId) ?? null;

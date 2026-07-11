@@ -94,6 +94,48 @@ export function clearWorkerAuthStorage(): void {
   removeWorkerToken();
   removeStoredWorkerUser();
   removeStoredWorkerProfileId();
+  removePendingWorkerDetails();
+}
+
+export interface PendingWorkerDetails {
+  name: string;
+  email?: string;
+  mobile: string;
+  city: string;
+  state: string;
+  address: string;
+  pincode: string;
+}
+
+const PENDING_WORKER_DETAILS_KEY = "ustadji_pending_worker_details";
+
+export function getPendingWorkerDetails(): PendingWorkerDetails | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(PENDING_WORKER_DETAILS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as PendingWorkerDetails;
+  } catch {
+    return null;
+  }
+}
+
+export function setPendingWorkerDetails(details: PendingWorkerDetails): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(PENDING_WORKER_DETAILS_KEY, JSON.stringify(details));
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+export function removePendingWorkerDetails(): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(PENDING_WORKER_DETAILS_KEY);
+  } catch {
+    /* storage unavailable */
+  }
 }
 
 export function getWorkerUserIdFromToken(): number | null {

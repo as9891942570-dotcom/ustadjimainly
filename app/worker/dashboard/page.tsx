@@ -32,6 +32,7 @@ import {
   WorkerProfile,
   getWorkerId,
 } from "@/types/worker";
+import { getPendingWorkerDetails, removePendingWorkerDetails } from "@/lib/workerAuth";
 
 type DashboardView = "view" | "create" | "edit";
 
@@ -157,6 +158,7 @@ function WorkerDashboardContent() {
   const [step1Profile, setStep1Profile] = useState<WorkerCreatePayload | null>(null);
   const [step1Kyc, setStep1Kyc] = useState<WorkerKycDetails | null>(null);
   const [step2Images, setStep2Images] = useState<Step2Images>(emptyStep2Images);
+  const [pendingDetails, setPendingDetails] = useState<ReturnType<typeof getPendingWorkerDetails>>(null);
 
   // Pre-fill document URLs when profile exists and we are editing or resubmitting
   useEffect(() => {
@@ -171,6 +173,10 @@ function WorkerDashboardContent() {
       });
     }
   }, [workerProfile]);
+
+  useEffect(() => {
+    setPendingDetails(getPendingWorkerDetails());
+  }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -267,6 +273,8 @@ function WorkerDashboardContent() {
         selfie_image: step2Images.selfie_image,
       });
 
+      removePendingWorkerDetails();
+      setPendingDetails(null);
       toast.success("Worker KYC submitted successfully");
       setKycStep(3);
     } catch (error) {
@@ -326,7 +334,19 @@ function WorkerDashboardContent() {
         ...step1Profile,
         ...(step1Kyc || {}),
       } as WorkerProfile)
-    : workerProfile;
+    : workerProfile
+      ? workerProfile
+      : pendingDetails
+        ? ({
+            name: pendingDetails.name,
+            email: pendingDetails.email || "",
+            mobile: pendingDetails.mobile,
+            city: pendingDetails.city,
+            state: pendingDetails.state,
+            address: pendingDetails.address,
+            pincode: pendingDetails.pincode,
+          } as WorkerProfile)
+        : null;
 
   return (
     <div className="px-4 py-12 sm:px-6 lg:px-8">

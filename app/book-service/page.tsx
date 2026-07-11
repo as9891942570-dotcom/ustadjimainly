@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Banknote } from "lucide-react";
+import { toast } from "sonner";
+import { ArrowLeft, Banknote } from "lucide-react";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Button from "@/components/Button";
 import { ServiceBookingProvider, useServiceBooking } from "@/context/ServiceBookingContext";
+import { useAuth } from "@/context/AuthContext";
 import { BOOKING_STEPS, BookingStep } from "@/types/booking";
 import { fetchServiceById } from "@/services/serviceApi";
 import ServiceSelection from "@/components/service/ServiceSelection";
@@ -16,6 +19,7 @@ import OrderSummary from "@/components/service/OrderSummary";
 import AddressSelector from "@/components/service/AddressSelector";
 import OrderConfirmation from "@/components/service/OrderConfirmation";
 import { formatCurrency } from "@/utils/priceCalculation";
+import api, { getApiErrorMessage } from "@/lib/axios";
 
 function StepIndicator({ currentStep }: { currentStep: BookingStep }) {
   const currentIdx = BOOKING_STEPS.findIndex((s) => s.key === currentStep);
@@ -64,11 +68,66 @@ function StepIndicator({ currentStep }: { currentStep: BookingStep }) {
 }
 
 function PaymentStep() {
+  const { user } = useAuth();
   const {
+    selectedService,
+    selectedPreference,
+    bookingType,
+    quantity,
+    hours,
+    selectedDate,
+    selectedTime,
+    selectedAddress,
     estimatedAmount,
     nextStep,
     prevStep,
   } = useServiceBooking();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleConfirm = async () => {
+    if (!user || !selectedService) {
+      toast.error("Please login and select a service to continue.");
+      return;
+    }
+
+    const formattedDate = selectedDate
+      ? new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        })
+      : "TBD";
+
+    const addressLine = selectedAddress
+      ? `${selectedAddress.address}, ${selectedAddress.city}${
+          selectedAddress.state ? `, ${selectedAddress.state}` : ""
+        } - ${selectedAddress.pincode}`
+      : "Address not provided";
+
+    const problem = [
+      selectedPreference?.label || selectedService.title,
+      `${bookingType === "full_time" ? "Full Time" : "Hourly"} · Qty ${quantity}${
+        bookingType === "hourly" ? ` · ${hours} hrs` : ""
+      }`,
+      `Date: ${formattedDate} · Time: ${selectedTime || "TBD"}`,
+      `Address: ${addressLine}`,
+      `Est. amount: ${formatCurrency(estimatedAmount)} (Cash)`,
+    ].join(" | ");
+
+    setIsSubmitting(true);
+    try {
+      await api.post(`/auth/request-service/${user.id}`, {
+        worker_type: selectedService.workerType || selectedService.title,
+        problem,
+      });
+      toast.success("Booking submitted successfully!");
+      nextStep();
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, "Failed to submit booking"));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div>
@@ -93,10 +152,10 @@ function PaymentStep() {
       </div>
 
       <div className="mt-8 flex gap-3">
-        <Button variant="secondary" className="flex-1" onClick={prevStep}>
+        <Button variant="secondary" className="flex-1" onClick={prevStep} disabled={isSubmitting}>
           Back
         </Button>
-        <Button className="flex-1" onClick={nextStep}>
+        <Button className="flex-1" onClick={handleConfirm} isLoading={isSubmitting}>
           Confirm & Pay Cash
         </Button>
       </div>
@@ -150,13 +209,22 @@ function BookingFlowContent() {
   return (
     <div className="px-4 py-12 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-3xl">
-        <div className="mb-6 text-center">
-          <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
-            Book a Service
-          </h1>
-          <p className="mt-1 text-gray-600">
-            Complete the steps below to schedule your service
-          </p>
+        <div className="mb-6">
+          <Link
+            href="/services"
+            className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-700 hover:text-emerald-800"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Services
+          </Link>
+          <div className="text-center">
+            <h1 className="text-2xl font-bold text-gray-900 sm:text-3xl">
+              Book a Service
+            </h1>
+            <p className="mt-1 text-gray-600">
+              Complete the steps below to schedule your service
+            </p>
+          </div>
         </div>
 
         {currentStep !== "confirmation" && (

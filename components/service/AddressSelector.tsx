@@ -1,16 +1,20 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Check, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import Modal from "@/components/Modal";
+import LocationSelect from "@/components/LocationSelect";
 import { useAuth } from "@/context/AuthContext";
 import { useServiceBooking } from "@/context/ServiceBookingContext";
-import { ADDRESSES_STORAGE_KEY, BookingAddress } from "@/types/booking";
+import {
+  BookingAddress,
+  getAddressesStorageKey,
+} from "@/types/booking";
 
 const addressSchema = z.object({
   fullName: z.string().min(1, "Full name is required"),
@@ -19,6 +23,7 @@ const addressSchema = z.object({
     .min(1, "Phone is required")
     .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number"),
   address: z.string().min(1, "Address is required"),
+  state: z.string().min(1, "State is required"),
   city: z.string().min(1, "City is required"),
   pincode: z
     .string()
@@ -28,10 +33,10 @@ const addressSchema = z.object({
 
 type AddressFormData = z.infer<typeof addressSchema>;
 
-function loadAddresses(): BookingAddress[] {
+function loadAddresses(userId?: number | null): BookingAddress[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(ADDRESSES_STORAGE_KEY);
+    const raw = localStorage.getItem(getAddressesStorageKey(userId));
     if (!raw) return [];
     return JSON.parse(raw) as BookingAddress[];
   } catch {
@@ -39,10 +44,10 @@ function loadAddresses(): BookingAddress[] {
   }
 }
 
-function saveAddresses(addresses: BookingAddress[]): void {
+function saveAddresses(addresses: BookingAddress[], userId?: number | null): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(ADDRESSES_STORAGE_KEY, JSON.stringify(addresses));
+    localStorage.setItem(getAddressesStorageKey(userId), JSON.stringify(addresses));
   } catch {
     /* storage unavailable */
   }
@@ -54,6 +59,7 @@ function createAddressId(): string {
   }
   return `addr-${Math.random().toString(36).slice(2, 11)}`;
 }
+
 function createAddressFromUser(user?: {
   firstName?: string;
   lastName?: string;
@@ -61,6 +67,7 @@ function createAddressFromUser(user?: {
   mobile?: string;
   address?: string;
   city?: string;
+  state?: string;
   pincode?: string;
 } | null): BookingAddress {
   let firstName = user?.firstName ?? "";
@@ -76,6 +83,7 @@ function createAddressFromUser(user?: {
     phone: user?.mobile ?? "-",
     address: user?.address ?? "-",
     city: user?.city ?? "-",
+    state: user?.state ?? "",
     pincode: user?.pincode ?? "-",
   };
 }
@@ -84,11 +92,13 @@ export default function AddressSelector() {
   const { user } = useAuth();
   const { selectedAddress, setSelectedAddress, nextStep, prevStep } =
     useServiceBooking();
-  const [savedAddresses, setSavedAddresses] = useState<BookingAddress[]>(() =>
-    loadAddresses()
-  );
+  const [savedAddresses, setSavedAddresses] = useState<BookingAddress[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSavedAddresses(loadAddresses(user?.id));
+  }, [user?.id]);
 
   const addresses = useMemo(() => {
     if (savedAddresses.length > 0) return savedAddresses;
@@ -98,39 +108,45 @@ export default function AddressSelector() {
     return [];
   }, [savedAddresses, user]);
 
-  const persistAddresses = useCallback((updated: BookingAddress[]) => {
-    setSavedAddresses(updated);
-    saveAddresses(updated);
-  }, []);
-
   const {
     register,
     handleSubmit,
+    control,
     reset,
     formState: { errors },
   } = useForm<AddressFormData>({
     resolver: zodResolver(addressSchema),
+    defaultValues: { state: "", city: "" },
   });
 
-  const openAddModal = () => {
+  const persist = useCallback(
+    (next: BookingAddress[]) => {
+      setSavedAddresses(next);
+      saveAddresses(next, user?.id);
+    },
+    [user?.id]
+  );
+
+  const openAdd = () => {
     setEditingId(null);
-    const defaultAddr = user ? createAddressFromUser(user) : null;
     reset({
-      fullName: defaultAddr ? defaultAddr.fullName : "",
+      fullName: "",
       phone: user?.mobile ?? "",
       address: "",
+      state: user?.state ?? "",
       city: user?.city ?? "",
-      pincode: user?.pincode ?? "",
+      pincode: "",
     });
     setModalOpen(true);
   };
 
-  const openEditModal = (addr: BookingAddress) => {
+  const openEdit = (addr: BookingAddress) => {
     setEditingId(addr.id);
     reset({
       fullName: addr.fullName,
       phone: addr.phone,
       address: addr.address,
+      state: addr.state ?? "",
       city: addr.city,
       pincode: addr.pincode,
     });
@@ -138,33 +154,29 @@ export default function AddressSelector() {
   };
 
   const onSubmit = (data: AddressFormData) => {
-    let updated: BookingAddress[];
-
     if (editingId) {
-      updated = addresses.map((a) =>
-        a.id === editingId ? { ...a, ...data } : a
-      );
+      const next = (savedAddresses.length ? savedAddresses : addresses).map((a) => {
+        if (a.id !== editingId) return a;
+        const id = a.id === "profile-default" ? createAddressId() : a.id;
+        return { ...a, ...data, id };
+      });
+      const persisted = next.filter((a) => a.id !== "profile-default");
+      persist(persisted);
+      const updated = persisted.find((a) => a.fullName === data.fullName && a.phone === data.phone) ?? persisted[0] ?? null;
+      if (selectedAddress?.id === editingId || selectedAddress?.id === "profile-default") {
+        setSelectedAddress(updated);
+      }
     } else {
-      const newAddress: BookingAddress = {
-        id: createAddressId(),
-        ...data,
-      };
-      updated = [...addresses, newAddress];
+      const newAddr: BookingAddress = { id: createAddressId(), ...data };
+      persist([...(savedAddresses.length ? savedAddresses : []), newAddr]);
+      setSelectedAddress(newAddr);
     }
-
-    persistAddresses(updated);
-
-    const saved = editingId
-      ? updated.find((a) => a.id === editingId)
-      : updated[updated.length - 1];
-    if (saved) setSelectedAddress(saved);
-
     setModalOpen(false);
   };
 
   const handleDelete = (id: string) => {
-    const updated = addresses.filter((a) => a.id !== id);
-    persistAddresses(updated);
+    const next = savedAddresses.filter((a) => a.id !== id);
+    persist(next);
     if (selectedAddress?.id === id) setSelectedAddress(null);
   };
 
@@ -174,76 +186,80 @@ export default function AddressSelector() {
         <div>
           <h2 className="text-xl font-bold text-gray-900">Select Address</h2>
           <p className="mt-1 text-sm text-gray-600">
-            Choose or add a delivery address
+            Choose where the professional should arrive
           </p>
         </div>
-        <Button size="sm" onClick={openAddModal}>
+        <Button size="sm" variant="secondary" onClick={openAdd}>
           <Plus className="h-4 w-4" />
-          Add Address
+          Add
         </Button>
       </div>
 
       {addresses.length === 0 ? (
         <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/50 px-6 py-10 text-center">
           <MapPin className="mx-auto mb-3 h-10 w-10 text-emerald-300" />
-          <p className="font-medium text-gray-700">No addresses saved</p>
-          <p className="mt-1 text-sm text-gray-500">Add an address to continue</p>
-          <Button size="sm" className="mt-4" onClick={openAddModal}>
+          <p className="font-medium text-gray-700">No saved addresses</p>
+          <Button size="sm" className="mt-4" onClick={openAdd}>
             Add Address
           </Button>
         </div>
       ) : (
         <div className="space-y-3">
           {addresses.map((addr) => {
-            const isSelected = selectedAddress?.id === addr.id;
+            const selected = selectedAddress?.id === addr.id;
             return (
               <div
                 key={addr.id}
                 className={`rounded-xl border p-4 transition ${
-                  isSelected
-                    ? "border-emerald-500 bg-emerald-50/80"
-                    : "border-gray-200 bg-white/80"
+                  selected
+                    ? "border-emerald-500 bg-emerald-50/60"
+                    : "border-gray-100 bg-white hover:border-emerald-200"
                 }`}
               >
-                <div className="flex items-start gap-3">
+                <div className="flex items-start justify-between gap-3">
                   <button
                     type="button"
+                    className="flex flex-1 items-start gap-3 text-left"
                     onClick={() => setSelectedAddress(addr)}
-                    className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
-                      isSelected
-                        ? "border-emerald-600 bg-emerald-600 text-white"
-                        : "border-gray-300"
-                    }`}
                   >
-                    {isSelected && <Check className="h-3 w-3" />}
-                  </button>
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-gray-900">{addr.fullName}</p>
-                    <p className="text-sm text-gray-600">{addr.phone}</p>
-                    <p className="mt-1 text-sm text-gray-600">
-                      {addr.address}, {addr.city} - {addr.pincode}
-                    </p>
-                  </div>
-                  <div className="flex gap-1">
-                    <button
-                      type="button"
-                      onClick={() => openEditModal(addr)}
-                      className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-emerald-700"
-                      aria-label="Edit address"
+                    <span
+                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border ${
+                        selected
+                          ? "border-emerald-600 bg-emerald-600 text-white"
+                          : "border-gray-300"
+                      }`}
                     >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                    {addr.id !== "profile-default" && (
+                      {selected && <Check className="h-3 w-3" />}
+                    </span>
+                    <div>
+                      <p className="font-semibold text-gray-900">{addr.fullName}</p>
+                      <p className="text-sm text-gray-600">{addr.phone}</p>
+                      <p className="mt-1 text-sm text-gray-600">
+                        {addr.address}, {addr.city}
+                        {addr.state ? `, ${addr.state}` : ""} - {addr.pincode}
+                      </p>
+                    </div>
+                  </button>
+                  {addr.id !== "profile-default" && (
+                    <div className="flex gap-1">
                       <button
                         type="button"
+                        className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
+                        onClick={() => openEdit(addr)}
+                        aria-label="Edit address"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-lg p-2 text-red-500 hover:bg-red-50"
                         onClick={() => handleDelete(addr.id)}
-                        className="rounded-lg p-2 text-gray-500 hover:bg-red-50 hover:text-red-600"
                         aria-label="Delete address"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -286,7 +302,26 @@ export default function AddressSelector() {
             error={errors.address?.message}
             {...register("address")}
           />
-          <Input label="City" error={errors.city?.message} {...register("city")} />
+          <Controller
+            name="state"
+            control={control}
+            render={({ field: stateField }) => (
+              <Controller
+                name="city"
+                control={control}
+                render={({ field: cityField }) => (
+                  <LocationSelect
+                    state={stateField.value}
+                    city={cityField.value}
+                    onStateChange={stateField.onChange}
+                    onCityChange={cityField.onChange}
+                    stateError={errors.state?.message}
+                    cityError={errors.city?.message}
+                  />
+                )}
+              />
+            )}
+          />
           <Input
             label="Pincode"
             error={errors.pincode?.message}

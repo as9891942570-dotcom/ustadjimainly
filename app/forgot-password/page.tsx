@@ -12,18 +12,15 @@ import { useAuth } from "@/context/AuthContext";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
 import { getApiErrorMessage } from "@/lib/axios";
+import axios from "axios";
 
 const MOBILE_REGEX = /^[6-9]\d{9}$/;
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const identifierSchema = z.object({
-  identifier: z
+  mobile: z
     .string()
-    .min(1, "Email or mobile number is required")
-    .refine(
-      (val) => MOBILE_REGEX.test(val) || EMAIL_REGEX.test(val),
-      "Enter a valid email or 10-digit mobile number"
-    ),
+    .min(1, "Mobile number is required")
+    .regex(MOBILE_REGEX, "Enter a valid 10-digit mobile number"),
 });
 
 const resetSchema = z
@@ -39,18 +36,11 @@ const resetSchema = z
 type IdentifierFormData = z.infer<typeof identifierSchema>;
 type ResetFormData = z.infer<typeof resetSchema>;
 
-function buildForgotPayload(identifier: string) {
-  if (MOBILE_REGEX.test(identifier)) {
-    return { mobile: identifier };
-  }
-  return { email: identifier };
-}
-
 export default function ForgotPasswordPage() {
   const { forgotPassword, resetPassword } = useAuth();
   const router = useRouter();
   const [step, setStep] = useState<"request" | "reset">("request");
-  const [identifier, setIdentifier] = useState("");
+  const [mobile, setMobile] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const identifierForm = useForm<IdentifierFormData>({
@@ -64,12 +54,23 @@ export default function ForgotPasswordPage() {
   const onRequestSubmit = async (data: IdentifierFormData) => {
     setIsSubmitting(true);
     try {
-      await forgotPassword(buildForgotPayload(data.identifier));
-      setIdentifier(data.identifier);
+      await forgotPassword({ mobile: data.mobile });
+      setMobile(data.mobile);
       setStep("reset");
       toast.success("Verification successful. Set your new password.");
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Failed to process request"));
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        toast.error(
+          "Password recovery is not available right now. Please contact support with your registered mobile number."
+        );
+      } else {
+        toast.error(
+          getApiErrorMessage(
+            error,
+            "No account found for this mobile number. Please check and try again."
+          )
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -79,13 +80,19 @@ export default function ForgotPasswordPage() {
     setIsSubmitting(true);
     try {
       await resetPassword({
-        ...buildForgotPayload(identifier),
+        mobile,
         password: data.password,
       });
       toast.success("Password reset successful! Please login.");
       router.push("/login");
     } catch (error) {
-      toast.error(getApiErrorMessage(error, "Failed to reset password"));
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        toast.error(
+          "Password reset is not available right now. Please contact support."
+        );
+      } else {
+        toast.error(getApiErrorMessage(error, "Failed to reset password"));
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -104,8 +111,8 @@ export default function ForgotPasswordPage() {
             </h1>
             <p className="mt-2 text-sm text-gray-600">
               {step === "request"
-                ? "Enter your registered email or mobile number"
-                : "Create a new password for your account"}
+                ? "Enter your registered mobile number to recover your password"
+                : `Create a new password for ${mobile}`}
             </p>
           </div>
 
@@ -115,11 +122,12 @@ export default function ForgotPasswordPage() {
               className="space-y-5"
             >
               <Input
-                label="Email or Mobile Number"
-                type="text"
-                placeholder="email@example.com or 9876543210"
-                error={identifierForm.formState.errors.identifier?.message}
-                {...identifierForm.register("identifier")}
+                label="Mobile Number"
+                type="tel"
+                inputMode="numeric"
+                placeholder="9876543210"
+                error={identifierForm.formState.errors.mobile?.message}
+                {...identifierForm.register("mobile")}
               />
               <Button type="submit" className="w-full" isLoading={isSubmitting}>
                 Continue
@@ -162,6 +170,12 @@ export default function ForgotPasswordPage() {
             Remember your password?{" "}
             <Link href="/login" className="font-semibold text-emerald-700 hover:underline">
               Login
+            </Link>
+          </p>
+          <p className="mt-2 text-center text-sm text-gray-500">
+            Need help?{" "}
+            <Link href="/support" className="font-semibold text-emerald-700 hover:underline">
+              Contact support
             </Link>
           </p>
         </div>

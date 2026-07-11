@@ -3,31 +3,39 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useForm } from "react-hook-form";
+import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
+import LocationSelect from "@/components/LocationSelect";
 import { getApiErrorMessage } from "@/lib/axios";
 import { UserPlus } from "lucide-react";
 
-const registerSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  mobileNumber: z
-    .string()
-    .min(1, "Mobile number is required")
-    .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  city: z.string().min(1, "City is required"),
-  address: z.string().min(1, "Address is required"),
-  pincode: z
-    .string()
-    .min(1, "Pincode is required")
-    .regex(/^\d{6}$/, "Enter a valid 6-digit pincode"),
-});
+const registerSchema = z
+  .object({
+    firstName: z.string().min(1, "First name is required"),
+    lastName: z.string().min(1, "Last name is required"),
+    mobileNumber: z
+      .string()
+      .min(1, "Mobile number is required")
+      .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number"),
+    password: z.string().min(6, "Password must be at least 6 characters"),
+    confirmPassword: z.string().min(1, "Please confirm your password"),
+    state: z.string().min(1, "State is required"),
+    city: z.string().min(1, "City is required"),
+    address: z.string().min(1, "Address is required"),
+    pincode: z
+      .string()
+      .min(1, "Pincode is required")
+      .regex(/^\d{6}$/, "Enter a valid 6-digit pincode"),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
 
 type RegisterFormData = z.infer<typeof registerSchema>;
 
@@ -39,9 +47,14 @@ export default function RegisterPage() {
   const {
     register,
     handleSubmit,
+    control,
     formState: { errors },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
+    defaultValues: {
+      state: "",
+      city: "",
+    },
   });
 
   const onSubmit = async (data: RegisterFormData) => {
@@ -55,6 +68,7 @@ export default function RegisterPage() {
         city: data.city,
         address: data.address,
         pincode: data.pincode,
+        state: data.state,
       });
       toast.success("Registration successful! Please login.");
       router.push("/login");
@@ -107,10 +121,31 @@ export default function RegisterPage() {
               {...register("password")}
             />
             <Input
-              label="City"
-              placeholder="Mumbai"
-              error={errors.city?.message}
-              {...register("city")}
+              label="Confirm Password"
+              type="password"
+              placeholder="Re-enter password"
+              error={errors.confirmPassword?.message}
+              {...register("confirmPassword")}
+            />
+            <Controller
+              name="state"
+              control={control}
+              render={({ field: stateField }) => (
+                <Controller
+                  name="city"
+                  control={control}
+                  render={({ field: cityField }) => (
+                    <LocationSelect
+                      state={stateField.value}
+                      city={cityField.value}
+                      onStateChange={stateField.onChange}
+                      onCityChange={cityField.onChange}
+                      stateError={errors.state?.message}
+                      cityError={errors.city?.message}
+                    />
+                  )}
+                />
+              )}
             />
             <Input
               label="Address"
