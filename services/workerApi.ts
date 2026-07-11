@@ -167,10 +167,10 @@ function unwrapKycRecord(data: unknown): WorkerKycRecord | null {
   if (!data || typeof data !== "object") return null;
   const obj = data as Record<string, unknown>;
   if (obj.data && typeof obj.data === "object") {
-    return obj.data as WorkerKycRecord;
+    return obj.data as unknown as WorkerKycRecord;
   }
   if ("worker_id" in obj || "kyc_status" in obj || "aadhaar_number" in obj) {
-    return obj as WorkerKycRecord;
+    return obj as unknown as WorkerKycRecord;
   }
   return null;
 }
