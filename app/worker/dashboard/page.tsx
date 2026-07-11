@@ -138,9 +138,11 @@ function WorkerDashboardContent() {
   const {
     workerAccount,
     workerProfile,
+    workerKyc,
     isProfileLoading,
     logout,
     refreshProfile,
+    refreshKyc,
     createProfile,
     updateProfile,
     removeProfile,
@@ -182,9 +184,21 @@ function WorkerDashboardContent() {
     setIsRefreshing(true);
     try {
       await refreshProfile();
-      toast.success("Profile status updated");
+      const kyc = await refreshKyc();
+      const kycStatus = (kyc?.kyc_status || "").toLowerCase();
+      if (kycStatus === "approved") {
+        toast.success("KYC approved");
+      } else if (kycStatus === "rejected") {
+        toast.error("KYC rejected. Please update and resubmit.");
+      } else if (kycStatus === "pending") {
+        toast.success("KYC is still pending approval");
+      } else if (kyc) {
+        toast.success(`KYC status: ${kyc.kyc_status}`);
+      } else {
+        toast.success("Profile refreshed. No KYC record found yet.");
+      }
     } catch (error) {
-      toast.error(getWorkerApiErrorMessage(error, "Failed to refresh profile"));
+      toast.error(getWorkerApiErrorMessage(error, "Failed to refresh KYC status"));
     } finally {
       setIsRefreshing(false);
     }
@@ -325,8 +339,13 @@ function WorkerDashboardContent() {
     }
   };
 
-  const status = (workerProfile?.status || "").toLowerCase();
-  const isKycIncomplete = !workerProfile;
+  const status = (
+    workerKyc?.kyc_status ||
+    workerProfile?.kyc_status ||
+    workerProfile?.status ||
+    ""
+  ).toLowerCase();
+  const isKycIncomplete = !workerProfile && !workerKyc;
 
   const formInitialData: WorkerProfile | null = step1Profile
     ? ({
@@ -522,8 +541,8 @@ function WorkerDashboardContent() {
                 onClick={handleRefresh}
                 isLoading={isRefreshing}
               >
-                <RefreshCw className="h-4 w-4 animate-spin-slow" />
-                Refresh Status
+                <RefreshCw className="h-4 w-4" />
+                Check KYC Status
               </Button>
               <Button variant="outline" size="sm" onClick={() => logout()}>
                 <LogOut className="h-4 w-4" />
@@ -563,17 +582,33 @@ function WorkerDashboardContent() {
         ) : (
           // Approved Profile / Normal Dashboard
           <>
+            {workerKyc?.kyc_status && (
+              <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                <CheckCircle2 className="h-4 w-4 shrink-0" />
+                KYC status: <span className="font-semibold">{workerKyc.kyc_status}</span>
+              </div>
+            )}
             <div className="mb-4 flex flex-wrap gap-2">
-              <Button size="sm" onClick={handleEditClick}>
+              <Button size="sm" onClick={handleEditClick} disabled={!workerProfile}>
                 <Pencil className="h-4 w-4" />
                 Edit Profile
               </Button>
-              <Button variant="danger" size="sm" onClick={() => setDeleteOpen(true)}>
+              <Button variant="danger" size="sm" onClick={() => setDeleteOpen(true)} disabled={!workerProfile}>
                 <Trash2 className="h-4 w-4" />
                 Delete Profile
               </Button>
             </div>
-            <WorkerProfileCard profile={workerProfile} />
+            {workerProfile ? (
+              <WorkerProfileCard profile={workerProfile} />
+            ) : (
+              <div className="rounded-xl border border-white/40 bg-white/70 p-8 text-center shadow-sm backdrop-blur-md">
+                <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-emerald-600" />
+                <h2 className="text-xl font-bold text-gray-900">KYC Approved</h2>
+                <p className="mt-2 text-sm text-gray-600">
+                  Your KYC verification is complete.
+                </p>
+              </div>
+            )}
           </>
         )}
       </div>

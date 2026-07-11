@@ -36,6 +36,13 @@ export interface WorkerKycPayload {
   selfie_image?: string | null;
 }
 
+export interface WorkerKycRecord extends WorkerKycPayload {
+  id?: number;
+  kyc_status?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 /** KYC identity + bank fields collected in the onboarding form (before worker_id exists). */
 export interface WorkerKycDetails {
   aadhaar_number: string;
@@ -50,6 +57,7 @@ export interface WorkerProfile extends WorkerCreatePayload {
   worker_id?: number;
   id?: number;
   status?: string;
+  profile_status?: string;
   rejection_reason?: string;
   pan_number?: string;
   account_holder_name?: string;
@@ -59,6 +67,7 @@ export interface WorkerProfile extends WorkerCreatePayload {
   pan_card_image?: string;
   passbook_image?: string;
   selfie_image?: string;
+  kyc_status?: string;
 }
 
 export interface WorkerAccount {

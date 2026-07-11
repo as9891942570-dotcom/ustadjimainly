@@ -6,6 +6,7 @@ import {
 import {
   WorkerCreatePayload,
   WorkerKycPayload,
+  WorkerKycRecord,
   WorkerLoginPayload,
   WorkerLoginResponse,
   WorkerProfile,
@@ -162,9 +163,50 @@ export async function submitWorkerKyc(payload: WorkerKycPayload): Promise<unknow
   return data;
 }
 
-export async function getWorkerKyc(workerId: number): Promise<WorkerKycPayload | null> {
-  const { data } = await workerApi.get<WorkerKycPayload>(`/worker-kyc/${workerId}`);
-  return data || null;
+function unwrapKycRecord(data: unknown): WorkerKycRecord | null {
+  if (!data || typeof data !== "object") return null;
+  const obj = data as Record<string, unknown>;
+  if (obj.data && typeof obj.data === "object") {
+    return obj.data as WorkerKycRecord;
+  }
+  if ("worker_id" in obj || "kyc_status" in obj || "aadhaar_number" in obj) {
+    return obj as WorkerKycRecord;
+  }
+  return null;
+}
+
+export async function getWorkerKyc(workerId: number): Promise<WorkerKycRecord | null> {
+  try {
+    const { data } = await workerApi.get<unknown>(`/worker-kyc/${workerId}`);
+    return unwrapKycRecord(data);
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+export async function findWorkerIdByMobile(mobile: string): Promise<number | null> {
+  try {
+    const { data } = await workerApi.get<unknown>("/worker-profiles");
+    const list = Array.isArray(data)
+      ? data
+      : data && typeof data === "object" && Array.isArray((data as { data?: unknown }).data)
+        ? ((data as { data: unknown[] }).data)
+        : [];
+
+    const match = list.find((item) => {
+      if (!item || typeof item !== "object") return false;
+      const row = item as Record<string, unknown>;
+      return String(row.mobile ?? "") === String(mobile);
+    }) as Record<string, unknown> | undefined;
+
+    if (!match) return null;
+    return extractWorkerId(match);
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -199,7 +241,16 @@ export async function getLoggedInWorkerProfile(
       return await getWorkerProfile(workerId);
     }
   } catch {
-    return null;
+    /* fall through to profiles list */
+  }
+
+  const resolvedId = await findWorkerIdByMobile(mobile);
+  if (resolvedId) {
+    try {
+      return await getWorkerProfile(resolvedId);
+    } catch {
+      return null;
+    }
   }
 
   return null;
