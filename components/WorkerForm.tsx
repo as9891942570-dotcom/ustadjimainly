@@ -6,7 +6,12 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import Input from "@/components/Input";
 import Button from "@/components/Button";
-import { WORKER_CATEGORIES, WorkerCreatePayload, WorkerProfile } from "@/types/worker";
+import {
+  WORKER_CATEGORIES,
+  WorkerCreatePayload,
+  WorkerKycDetails,
+  WorkerProfile,
+} from "@/types/worker";
 
 const workerFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -35,6 +40,20 @@ const workerFormSchema = z.object({
     .string()
     .min(1, "Aadhaar number is required")
     .regex(/^\d{12}$/, "Enter a valid 12-digit Aadhaar number"),
+  pan_number: z
+    .string()
+    .min(1, "PAN number is required")
+    .regex(/^[A-Z]{5}[0-9]{4}[A-Z]$/, "Enter a valid PAN (e.g. ABCDE1234F)"),
+  account_holder_name: z.string().min(1, "Account holder name is required"),
+  bank_name: z.string().min(1, "Bank name is required"),
+  account_number: z
+    .string()
+    .min(1, "Account number is required")
+    .regex(/^\d{9,18}$/, "Enter a valid account number (9–18 digits)"),
+  ifsc_code: z
+    .string()
+    .min(1, "IFSC code is required")
+    .regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, "Enter a valid IFSC code"),
   profile_image: z.string().optional(),
   aadhaar_front: z.string().optional(),
   aadhaar_back: z.string().optional(),
@@ -42,12 +61,17 @@ const workerFormSchema = z.object({
 
 export type WorkerFormData = z.infer<typeof workerFormSchema>;
 
+export type WorkerFormSubmitData = {
+  profile: WorkerCreatePayload;
+  kyc: WorkerKycDetails;
+};
+
 interface WorkerFormProps {
   initialData?: WorkerProfile | null;
   defaultMobile?: string;
   submitLabel?: string;
   isSubmitting?: boolean;
-  onSubmit: (data: WorkerCreatePayload) => Promise<void>;
+  onSubmit: (data: WorkerFormSubmitData) => Promise<void>;
   onCancel?: () => void;
   excludeImages?: boolean;
 }
@@ -80,6 +104,11 @@ function toFormDefaults(
     skills: profile?.skills ?? "",
     about: profile?.about ?? "",
     aadhaar_number: profile?.aadhaar_number ?? "",
+    pan_number: (profile?.pan_number ?? "").toUpperCase(),
+    account_holder_name: profile?.account_holder_name ?? "",
+    bank_name: profile?.bank_name ?? "",
+    account_number: profile?.account_number ?? "",
+    ifsc_code: (profile?.ifsc_code ?? "").toUpperCase(),
     profile_image: profile?.profile_image ?? "",
     aadhaar_front: profile?.aadhaar_front ?? "",
     aadhaar_back: profile?.aadhaar_back ?? "",
@@ -120,13 +149,36 @@ export default function WorkerForm({
   };
 
   const submitHandler = async (data: WorkerFormData) => {
-    const payload: WorkerCreatePayload = {
-      ...data,
+    const profile: WorkerCreatePayload = {
+      name: data.name,
+      email: data.email,
+      mobile: data.mobile,
+      gender: data.gender,
+      date_of_birth: data.date_of_birth,
+      address: data.address,
+      city: data.city,
+      state: data.state,
+      pincode: data.pincode,
+      category_id: data.category_id,
+      experience_years: data.experience_years,
+      skills: data.skills,
+      about: data.about,
+      aadhaar_number: data.aadhaar_number,
       profile_image: data.profile_image || "",
       aadhaar_front: data.aadhaar_front || "",
       aadhaar_back: data.aadhaar_back || "",
     };
-    await onSubmit(payload);
+
+    const kyc: WorkerKycDetails = {
+      aadhaar_number: data.aadhaar_number,
+      pan_number: data.pan_number.toUpperCase(),
+      account_holder_name: data.account_holder_name,
+      bank_name: data.bank_name,
+      account_number: data.account_number,
+      ifsc_code: data.ifsc_code.toUpperCase(),
+    };
+
+    await onSubmit({ profile, kyc });
   };
 
   return (
@@ -225,12 +277,60 @@ export default function WorkerForm({
         {errors.about && <p className="mt-1.5 text-sm text-red-500">{errors.about.message}</p>}
       </div>
 
-      <Input
-        label="Aadhaar Number"
-        placeholder="12-digit Aadhaar"
-        error={errors.aadhaar_number?.message}
-        {...register("aadhaar_number")}
-      />
+      <div className="border-t border-gray-100 pt-4">
+        <h3 className="mb-3 text-sm font-semibold text-gray-900">Identity & Bank Details</h3>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label="Aadhaar Number"
+            placeholder="12-digit Aadhaar"
+            error={errors.aadhaar_number?.message}
+            {...register("aadhaar_number")}
+          />
+          <Input
+            label="PAN Number"
+            placeholder="ABCDE1234F"
+            className="uppercase"
+            error={errors.pan_number?.message}
+            {...register("pan_number", {
+              onChange: (e) => {
+                e.target.value = e.target.value.toUpperCase();
+              },
+            })}
+          />
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Input
+            label="Account Holder Name"
+            error={errors.account_holder_name?.message}
+            {...register("account_holder_name")}
+          />
+          <Input
+            label="Bank Name"
+            error={errors.bank_name?.message}
+            {...register("bank_name")}
+          />
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <Input
+            label="Account Number"
+            error={errors.account_number?.message}
+            {...register("account_number")}
+          />
+          <Input
+            label="IFSC Code"
+            placeholder="SBIN0001234"
+            className="uppercase"
+            error={errors.ifsc_code?.message}
+            {...register("ifsc_code", {
+              onChange: (e) => {
+                e.target.value = e.target.value.toUpperCase();
+              },
+            })}
+          />
+        </div>
+      </div>
 
       {!excludeImages && (
         <div className="grid gap-4 sm:grid-cols-3">

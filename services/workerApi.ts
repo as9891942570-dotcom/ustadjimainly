@@ -5,6 +5,7 @@ import {
 } from "@/lib/workerAuth";
 import {
   WorkerCreatePayload,
+  WorkerKycPayload,
   WorkerLoginPayload,
   WorkerLoginResponse,
   WorkerProfile,
@@ -121,7 +122,11 @@ export async function createWorkerProfile(
   payload: WorkerCreatePayload
 ): Promise<WorkerProfile> {
   const { data } = await workerApi.post<WorkerProfile>("/worker-profile", payload);
-  return data || {} as WorkerProfile;
+  const safeData = data || ({} as WorkerProfile);
+  return {
+    ...safeData,
+    worker_id: extractWorkerId(safeData as unknown as Record<string, unknown>) ?? undefined,
+  };
 }
 
 export async function getWorkerProfile(workerId: number): Promise<WorkerProfile> {
@@ -150,6 +155,16 @@ export async function updateWorkerProfile(
 
 export async function deleteWorkerProfile(workerId: number): Promise<void> {
   await workerApi.delete(`/worker-profile/${workerId}`);
+}
+
+export async function submitWorkerKyc(payload: WorkerKycPayload): Promise<unknown> {
+  const { data } = await workerApi.post("/worker-kyc", payload);
+  return data;
+}
+
+export async function getWorkerKyc(workerId: number): Promise<WorkerKycPayload | null> {
+  const { data } = await workerApi.get<WorkerKycPayload>(`/worker-kyc/${workerId}`);
+  return data || null;
 }
 
 /**

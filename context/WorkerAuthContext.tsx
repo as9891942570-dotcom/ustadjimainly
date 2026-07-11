@@ -23,6 +23,7 @@ import {
   createWorkerProfile,
   deleteWorkerProfile,
   getLoggedInWorkerProfile,
+  submitWorkerKyc,
   updateWorkerProfile,
   workerLogin,
   workerLogout,
@@ -31,6 +32,7 @@ import {
 import {
   WorkerAccount,
   WorkerCreatePayload,
+  WorkerKycPayload,
   WorkerLoginPayload,
   WorkerProfile,
   WorkerRegisterPayload,
@@ -50,6 +52,7 @@ interface WorkerAuthContextValue {
   createProfile: (payload: WorkerCreatePayload) => Promise<WorkerProfile>;
   updateProfile: (payload: WorkerCreatePayload) => Promise<WorkerProfile>;
   removeProfile: () => Promise<void>;
+  submitKyc: (payload: Omit<WorkerKycPayload, "worker_id"> & { worker_id?: number }) => Promise<unknown>;
 }
 
 const WorkerAuthContext = createContext<WorkerAuthContextValue | undefined>(
@@ -200,6 +203,26 @@ export function WorkerAuthProvider({ children }: { children: React.ReactNode }) 
     }
   }, [workerProfile, workerAccount]);
 
+  const submitKyc = useCallback(
+    async (payload: Omit<WorkerKycPayload, "worker_id"> & { worker_id?: number }) => {
+      const workerId =
+        payload.worker_id ??
+        getWorkerId(workerProfile) ??
+        getStoredWorkerProfileId() ??
+        workerAccount?.worker_id;
+
+      if (!workerId) {
+        throw new Error("Worker ID not found. Create your profile before submitting KYC.");
+      }
+
+      return submitWorkerKyc({
+        ...payload,
+        worker_id: workerId,
+      });
+    },
+    [workerProfile, workerAccount]
+  );
+
   const value = useMemo(
     () => ({
       workerAccount,
@@ -214,6 +237,7 @@ export function WorkerAuthProvider({ children }: { children: React.ReactNode }) 
       createProfile,
       updateProfile: updateProfileHandler,
       removeProfile,
+      submitKyc,
     }),
     [
       workerAccount,
@@ -227,6 +251,7 @@ export function WorkerAuthProvider({ children }: { children: React.ReactNode }) 
       createProfile,
       updateProfileHandler,
       removeProfile,
+      submitKyc,
     ]
   );
 

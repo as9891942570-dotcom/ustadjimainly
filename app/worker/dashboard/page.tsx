@@ -16,7 +16,7 @@ import {
   Check,
 } from "lucide-react";
 import WorkerProtectedRoute from "@/components/WorkerProtectedRoute";
-import WorkerForm from "@/components/WorkerForm";
+import WorkerForm, { WorkerFormSubmitData } from "@/components/WorkerForm";
 import WorkerProfileCard from "@/components/WorkerProfile";
 import Button from "@/components/Button";
 import Modal from "@/components/Modal";
@@ -26,9 +26,32 @@ import {
   getWorkerApiErrorMessage,
   useWorkerAuth,
 } from "@/context/WorkerAuthContext";
-import { WorkerCreatePayload } from "@/types/worker";
+import {
+  WorkerCreatePayload,
+  WorkerKycDetails,
+  WorkerProfile,
+  getWorkerId,
+} from "@/types/worker";
 
 type DashboardView = "view" | "create" | "edit";
+
+type Step2Images = {
+  profile_image: string;
+  aadhaar_front: string;
+  aadhaar_back: string;
+  pan_card_image: string;
+  passbook_image: string;
+  selfie_image: string;
+};
+
+const emptyStep2Images = (): Step2Images => ({
+  profile_image: "",
+  aadhaar_front: "",
+  aadhaar_back: "",
+  pan_card_image: "",
+  passbook_image: "",
+  selfie_image: "",
+});
 
 const getCurrentLocation = (): Promise<{ latitude: number; longitude: number }> => {
   return new Promise((resolve, reject) => {
@@ -120,6 +143,7 @@ function WorkerDashboardContent() {
     createProfile,
     updateProfile,
     removeProfile,
+    submitKyc,
   } = useWorkerAuth();
 
   const [view, setView] = useState<DashboardView>("view");
@@ -130,20 +154,20 @@ function WorkerDashboardContent() {
 
   // KYC 3-Step Flow States
   const [kycStep, setKycStep] = useState<1 | 2 | 3>(1);
-  const [step1Data, setStep1Data] = useState<WorkerCreatePayload | null>(null);
-  const [step2Images, setStep2Images] = useState({
-    profile_image: "",
-    aadhaar_front: "",
-    aadhaar_back: "",
-  });
+  const [step1Profile, setStep1Profile] = useState<WorkerCreatePayload | null>(null);
+  const [step1Kyc, setStep1Kyc] = useState<WorkerKycDetails | null>(null);
+  const [step2Images, setStep2Images] = useState<Step2Images>(emptyStep2Images);
 
-  // Pre-fill states when profile exists and we are editing or resubmitting
+  // Pre-fill document URLs when profile exists and we are editing or resubmitting
   useEffect(() => {
     if (workerProfile) {
       setStep2Images({
         profile_image: workerProfile.profile_image || "",
         aadhaar_front: workerProfile.aadhaar_front || "",
         aadhaar_back: workerProfile.aadhaar_back || "",
+        pan_card_image: workerProfile.pan_card_image || "",
+        passbook_image: workerProfile.passbook_image || "",
+        selfie_image: workerProfile.selfie_image || "",
       });
     }
   }, [workerProfile]);
@@ -160,32 +184,42 @@ function WorkerDashboardContent() {
     }
   };
 
-  const handleStep1Submit = async (data: WorkerCreatePayload) => {
-    setStep1Data(data);
+  const handleStep1Submit = async (data: WorkerFormSubmitData) => {
+    setStep1Profile(data.profile);
+    setStep1Kyc(data.kyc);
     setKycStep(2);
   };
 
+  const allKycDocsUploaded =
+    !!step2Images.aadhaar_front &&
+    !!step2Images.aadhaar_back &&
+    !!step2Images.pan_card_image &&
+    !!step2Images.passbook_image &&
+    !!step2Images.selfie_image &&
+    !!step2Images.profile_image;
+
   const handleKycSubmit = async () => {
-    if (!step1Data) return;
+    if (!step1Profile || !step1Kyc) return;
     setIsSubmitting(true);
 
     let coords = { latitude: 0, longitude: 0 };
     try {
       coords = await getCurrentLocation();
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (process.env.NODE_ENV === "development") {
         console.warn("Geolocation failed in development mode, falling back to dummy coordinates:", err);
         coords = { latitude: 19.0760, longitude: 72.8777 }; // Mumbai coordinates fallback
       } else {
+        const geoErr = err as { code?: number; message?: string };
         let errorMsg = "Failed to retrieve location. Please enable location permissions to submit your KYC.";
-        if (err.code === 1) { // PERMISSION_DENIED
+        if (geoErr.code === 1) {
           errorMsg = "Location access denied. You must grant location permission to submit your KYC.";
-        } else if (err.code === 2) { // POSITION_UNAVAILABLE
+        } else if (geoErr.code === 2) {
           errorMsg = "Location information is unavailable.";
-        } else if (err.code === 3) { // TIMEOUT
+        } else if (geoErr.code === 3) {
           errorMsg = "Location request timed out. Please try again.";
-        } else if (err.message) {
-          errorMsg = err.message;
+        } else if (geoErr.message) {
+          errorMsg = geoErr.message;
         }
         toast.error(errorMsg);
         setIsSubmitting(false);
@@ -193,8 +227,8 @@ function WorkerDashboardContent() {
       }
     }
 
-    const payload: WorkerCreatePayload = {
-      ...step1Data,
+    const profilePayload: WorkerCreatePayload = {
+      ...step1Profile,
       profile_image: step2Images.profile_image,
       aadhaar_front: step2Images.aadhaar_front,
       aadhaar_back: step2Images.aadhaar_back,
@@ -204,16 +238,39 @@ function WorkerDashboardContent() {
     };
 
     try {
-      if (workerProfile && (workerProfile.worker_id ?? workerProfile.id)) {
-        await updateProfile(payload);
-        toast.success("Worker KYC updated successfully");
+      // 1) Create/update worker profile so we have a worker_id
+      let savedProfile;
+      if (workerProfile && getWorkerId(workerProfile)) {
+        savedProfile = await updateProfile(profilePayload);
       } else {
-        await createProfile(payload);
-        toast.success("Worker KYC created successfully");
+        savedProfile = await createProfile(profilePayload);
       }
+
+      const workerId = getWorkerId(savedProfile);
+      if (!workerId) {
+        throw new Error("Worker ID missing after saving profile. Cannot submit KYC.");
+      }
+
+      // 2) Submit KYC with Cloudinary document URLs
+      await submitKyc({
+        worker_id: workerId,
+        aadhaar_number: step1Kyc.aadhaar_number,
+        pan_number: step1Kyc.pan_number,
+        account_holder_name: step1Kyc.account_holder_name,
+        bank_name: step1Kyc.bank_name,
+        account_number: step1Kyc.account_number,
+        ifsc_code: step1Kyc.ifsc_code,
+        aadhaar_front: step2Images.aadhaar_front,
+        aadhaar_back: step2Images.aadhaar_back,
+        pan_card_image: step2Images.pan_card_image,
+        passbook_image: step2Images.passbook_image,
+        selfie_image: step2Images.selfie_image,
+      });
+
+      toast.success("Worker KYC submitted successfully");
       setKycStep(3);
     } catch (error) {
-      toast.error(getWorkerApiErrorMessage(error, "Failed to save profile"));
+      toast.error(getWorkerApiErrorMessage(error, "Failed to submit KYC"));
     } finally {
       setIsSubmitting(false);
     }
@@ -221,11 +278,22 @@ function WorkerDashboardContent() {
 
   const handleEditClick = () => {
     if (!workerProfile) return;
-    setStep1Data(workerProfile);
+    setStep1Profile(workerProfile);
+    setStep1Kyc({
+      aadhaar_number: workerProfile.aadhaar_number || "",
+      pan_number: workerProfile.pan_number || "",
+      account_holder_name: workerProfile.account_holder_name || "",
+      bank_name: workerProfile.bank_name || "",
+      account_number: workerProfile.account_number || "",
+      ifsc_code: workerProfile.ifsc_code || "",
+    });
     setStep2Images({
       profile_image: workerProfile.profile_image || "",
       aadhaar_front: workerProfile.aadhaar_front || "",
       aadhaar_back: workerProfile.aadhaar_back || "",
+      pan_card_image: workerProfile.pan_card_image || "",
+      passbook_image: workerProfile.passbook_image || "",
+      selfie_image: workerProfile.selfie_image || "",
     });
     setKycStep(1);
     setView("edit");
@@ -239,12 +307,9 @@ function WorkerDashboardContent() {
       setDeleteOpen(false);
       setView("create");
       setKycStep(1);
-      setStep1Data(null);
-      setStep2Images({
-        profile_image: "",
-        aadhaar_front: "",
-        aadhaar_back: "",
-      });
+      setStep1Profile(null);
+      setStep1Kyc(null);
+      setStep2Images(emptyStep2Images());
     } catch (error) {
       toast.error(getWorkerApiErrorMessage(error, "Failed to delete profile"));
     } finally {
@@ -254,6 +319,14 @@ function WorkerDashboardContent() {
 
   const status = (workerProfile?.status || "").toLowerCase();
   const isKycIncomplete = !workerProfile;
+
+  const formInitialData: WorkerProfile | null = step1Profile
+    ? ({
+        ...(workerProfile || {}),
+        ...step1Profile,
+        ...(step1Kyc || {}),
+      } as WorkerProfile)
+    : workerProfile;
 
   return (
     <div className="px-4 py-12 sm:px-6 lg:px-8">
@@ -318,10 +391,10 @@ function WorkerDashboardContent() {
             {kycStep === 1 ? (
               <div>
                 <p className="mb-6 text-sm text-gray-600">
-                  Step 1: Enter your personal and professional details.
+                  Step 1: Enter your personal, professional, identity, and bank details.
                 </p>
                 <WorkerForm
-                  initialData={step1Data || workerProfile}
+                  initialData={formInitialData}
                   defaultMobile={workerAccount?.mobile}
                   submitLabel="Continue to Step 2"
                   isSubmitting={false}
@@ -333,13 +406,18 @@ function WorkerDashboardContent() {
             ) : kycStep === 2 ? (
               <div>
                 <p className="mb-6 text-sm text-gray-600">
-                  Step 2: Upload your profile picture and Aadhaar Card.
+                  Step 2: Upload documents to Cloudinary. KYC is submitted after all uploads complete.
                 </p>
-                <div className="grid gap-6 sm:grid-cols-3">
+                <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
                   <CloudinaryUpload
                     label="Profile Photo"
                     value={step2Images.profile_image}
                     onChange={(url) => setStep2Images((prev) => ({ ...prev, profile_image: url }))}
+                  />
+                  <CloudinaryUpload
+                    label="Selfie"
+                    value={step2Images.selfie_image}
+                    onChange={(url) => setStep2Images((prev) => ({ ...prev, selfie_image: url }))}
                   />
                   <CloudinaryUpload
                     label="Aadhaar Front"
@@ -350,6 +428,16 @@ function WorkerDashboardContent() {
                     label="Aadhaar Back"
                     value={step2Images.aadhaar_back}
                     onChange={(url) => setStep2Images((prev) => ({ ...prev, aadhaar_back: url }))}
+                  />
+                  <CloudinaryUpload
+                    label="PAN Card"
+                    value={step2Images.pan_card_image}
+                    onChange={(url) => setStep2Images((prev) => ({ ...prev, pan_card_image: url }))}
+                  />
+                  <CloudinaryUpload
+                    label="Passbook / Cheque"
+                    value={step2Images.passbook_image}
+                    onChange={(url) => setStep2Images((prev) => ({ ...prev, passbook_image: url }))}
                   />
                 </div>
 
@@ -366,11 +454,7 @@ function WorkerDashboardContent() {
                     className="flex-1"
                     onClick={handleKycSubmit}
                     isLoading={isSubmitting}
-                    disabled={
-                      !step2Images.profile_image ||
-                      !step2Images.aadhaar_front ||
-                      !step2Images.aadhaar_back
-                    }
+                    disabled={!allKycDocsUploaded}
                   >
                     Submit KYC
                   </Button>

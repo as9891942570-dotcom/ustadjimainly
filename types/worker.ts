@@ -21,11 +21,44 @@ export interface WorkerCreatePayload {
   is_available?: boolean;
 }
 
+export interface WorkerKycPayload {
+  worker_id: number;
+  aadhaar_number: string;
+  pan_number?: string | null;
+  account_holder_name?: string | null;
+  bank_name?: string | null;
+  account_number?: string | null;
+  ifsc_code?: string | null;
+  aadhaar_front?: string | null;
+  aadhaar_back?: string | null;
+  pan_card_image?: string | null;
+  passbook_image?: string | null;
+  selfie_image?: string | null;
+}
+
+/** KYC identity + bank fields collected in the onboarding form (before worker_id exists). */
+export interface WorkerKycDetails {
+  aadhaar_number: string;
+  pan_number: string;
+  account_holder_name: string;
+  bank_name: string;
+  account_number: string;
+  ifsc_code: string;
+}
+
 export interface WorkerProfile extends WorkerCreatePayload {
   worker_id?: number;
   id?: number;
   status?: string;
   rejection_reason?: string;
+  pan_number?: string;
+  account_holder_name?: string;
+  bank_name?: string;
+  account_number?: string;
+  ifsc_code?: string;
+  pan_card_image?: string;
+  passbook_image?: string;
+  selfie_image?: string;
 }
 
 export interface WorkerAccount {
