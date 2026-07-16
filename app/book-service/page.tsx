@@ -19,7 +19,12 @@ import OrderSummary from "@/components/service/OrderSummary";
 import AddressSelector from "@/components/service/AddressSelector";
 import OrderConfirmation from "@/components/service/OrderConfirmation";
 import { formatCurrency } from "@/utils/priceCalculation";
-import api, { getApiErrorMessage } from "@/lib/axios";
+import { getApiErrorMessage } from "@/lib/axios";
+import {
+  createBooking,
+  ensureAddressId,
+  getBookingLocation,
+} from "@/services/bookingApi";
 
 function StepIndicator({ currentStep }: { currentStep: BookingStep }) {
   const currentIdx = BOOKING_STEPS.findIndex((s) => s.key === currentStep);
@@ -72,9 +77,6 @@ function PaymentStep() {
   const {
     selectedService,
     selectedPreference,
-    bookingType,
-    quantity,
-    hours,
     selectedDate,
     selectedTime,
     selectedAddress,
@@ -85,45 +87,40 @@ function PaymentStep() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleConfirm = async () => {
-    if (!user || !selectedService) {
-      toast.error("Please login and select a service to continue.");
+    if (!user?.id) {
+      toast.error("Please log in to complete your booking");
+      return;
+    }
+    if (!selectedService || !selectedDate || !selectedTime || !selectedAddress) {
+      toast.error("Missing booking details. Please go back and complete all steps.");
       return;
     }
 
-    const formattedDate = selectedDate
-      ? new Date(selectedDate + "T00:00:00").toLocaleDateString("en-IN", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-        })
-      : "TBD";
-
-    const addressLine = selectedAddress
-      ? `${selectedAddress.address}, ${selectedAddress.city}${
-          selectedAddress.state ? `, ${selectedAddress.state}` : ""
-        } - ${selectedAddress.pincode}`
-      : "Address not provided";
-
-    const problem = [
-      selectedPreference?.label || selectedService.title,
-      `${bookingType === "full_time" ? "Full Time" : "Hourly"} · Qty ${quantity}${
-        bookingType === "hourly" ? ` · ${hours} hrs` : ""
-      }`,
-      `Date: ${formattedDate} · Time: ${selectedTime || "TBD"}`,
-      `Address: ${addressLine}`,
-      `Est. amount: ${formatCurrency(estimatedAmount)} (Cash)`,
-    ].join(" | ");
-
     setIsSubmitting(true);
     try {
-      await api.post(`/auth/request-service/${user.id}`, {
-        worker_type: selectedService.workerType || selectedService.title,
-        problem,
+      const addressId = await ensureAddressId(user.id, selectedAddress);
+      const { latitude, longitude } = await getBookingLocation();
+
+      const serviceId = Number(selectedPreference?.id || selectedService.id);
+      if (!Number.isFinite(serviceId) || serviceId <= 0) {
+        throw new Error("Invalid service selected");
+      }
+
+      await createBooking(user.id, {
+        service_id: serviceId,
+        address_id: addressId,
+        booking_date: selectedDate,
+        time_slot: selectedTime,
+        latitude,
+        longitude,
+        amount: Math.round(estimatedAmount),
+        payment_method: "cash",
       });
-      toast.success("Booking submitted successfully!");
+
+      toast.success("Booking created successfully");
       nextStep();
     } catch (err) {
-      toast.error(getApiErrorMessage(err, "Failed to submit booking"));
+      toast.error(getApiErrorMessage(err, "Failed to create booking"));
     } finally {
       setIsSubmitting(false);
     }
@@ -155,7 +152,7 @@ function PaymentStep() {
         <Button variant="secondary" className="flex-1" onClick={prevStep} disabled={isSubmitting}>
           Back
         </Button>
-        <Button className="flex-1" onClick={handleConfirm} isLoading={isSubmitting}>
+        <Button className="flex-1" onClick={() => void handleConfirm()} isLoading={isSubmitting}>
           Confirm & Pay Cash
         </Button>
       </div>
