@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { toast } from "sonner";
 import { Check, MapPin, Pencil, Plus, Trash2 } from "lucide-react";
 import Button from "@/components/Button";
 import Input from "@/components/Input";
@@ -12,8 +11,6 @@ import Modal from "@/components/Modal";
 import LocationSelect from "@/components/LocationSelect";
 import { useAuth } from "@/context/AuthContext";
 import { useServiceBooking } from "@/context/ServiceBookingContext";
-import { addAddress, fetchAddresses } from "@/services/bookingApi";
-import { getApiErrorMessage } from "@/lib/axios";
 import {
   BookingAddress,
   getAddressesStorageKey,
@@ -98,35 +95,9 @@ export default function AddressSelector() {
   const [savedAddresses, setSavedAddresses] = useState<BookingAddress[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
-  const [loadingRemote, setLoadingRemote] = useState(false);
 
   useEffect(() => {
     setSavedAddresses(loadAddresses(user?.id));
-  }, [user?.id]);
-
-  useEffect(() => {
-    if (!user?.id) return;
-
-    let cancelled = false;
-    setLoadingRemote(true);
-
-    void fetchAddresses(user.id)
-      .then((remote) => {
-        if (cancelled || remote.length === 0) return;
-        setSavedAddresses(remote);
-        saveAddresses(remote, user.id);
-      })
-      .catch(() => {
-        /* keep localStorage fallback */
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingRemote(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
   }, [user?.id]);
 
   const addresses = useMemo(() => {
@@ -182,53 +153,28 @@ export default function AddressSelector() {
     setModalOpen(true);
   };
 
-  const onSubmit = async (data: AddressFormData) => {
-    setIsSaving(true);
-    try {
-      if (editingId) {
-        const existing = (savedAddresses.length ? savedAddresses : addresses).find(
-          (a) => a.id === editingId
-        );
-        let merged: BookingAddress = {
-          id: editingId === "profile-default" ? createAddressId() : editingId,
-          backendId: existing?.backendId,
-          ...data,
-        };
-
-        if (user?.id && !merged.backendId) {
-          const savedRemote = await addAddress(user.id, data);
-          merged = {
-            ...merged,
-            id: savedRemote.id,
-            backendId: savedRemote.backendId,
-          };
-        }
-
-        const next = (savedAddresses.length ? savedAddresses : addresses)
-          .map((a) => (a.id === editingId ? merged : a))
-          .filter((a) => a.id !== "profile-default");
-        persist(next);
-        setSelectedAddress(merged);
-      } else if (user?.id) {
-        const savedRemote = await addAddress(user.id, data);
-        persist([
-          ...(savedAddresses.length ? savedAddresses : []).filter(
-            (a) => a.id !== "profile-default"
-          ),
-          savedRemote,
-        ]);
-        setSelectedAddress(savedRemote);
-      } else {
-        const newAddr: BookingAddress = { id: createAddressId(), ...data };
-        persist([...(savedAddresses.length ? savedAddresses : []), newAddr]);
-        setSelectedAddress(newAddr);
+  const onSubmit = (data: AddressFormData) => {
+    if (editingId) {
+      const next = (savedAddresses.length ? savedAddresses : addresses).map((a) => {
+        if (a.id !== editingId) return a;
+        const id = a.id === "profile-default" ? createAddressId() : a.id;
+        return { ...a, ...data, id };
+      });
+      const persisted = next.filter((a) => a.id !== "profile-default");
+      persist(persisted);
+      const updated =
+        persisted.find((a) => a.fullName === data.fullName && a.phone === data.phone) ??
+        persisted[0] ??
+        null;
+      if (selectedAddress?.id === editingId || selectedAddress?.id === "profile-default") {
+        setSelectedAddress(updated);
       }
-      setModalOpen(false);
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, "Failed to save address"));
-    } finally {
-      setIsSaving(false);
+    } else {
+      const newAddr: BookingAddress = { id: createAddressId(), ...data };
+      persist([...(savedAddresses.length ? savedAddresses : []), newAddr]);
+      setSelectedAddress(newAddr);
     }
+    setModalOpen(false);
   };
 
   const handleDelete = (id: string) => {
@@ -252,11 +198,7 @@ export default function AddressSelector() {
         </Button>
       </div>
 
-      {loadingRemote && addresses.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/50 px-6 py-10 text-center">
-          <p className="font-medium text-gray-700">Loading addresses...</p>
-        </div>
-      ) : addresses.length === 0 ? (
+      {addresses.length === 0 ? (
         <div className="rounded-xl border border-dashed border-emerald-200 bg-emerald-50/50 px-6 py-10 text-center">
           <MapPin className="mx-auto mb-3 h-10 w-10 text-emerald-300" />
           <p className="font-medium text-gray-700">No saved addresses</p>
@@ -394,11 +336,10 @@ export default function AddressSelector() {
               type="button"
               className="flex-1"
               onClick={() => setModalOpen(false)}
-              disabled={isSaving}
             >
               Cancel
             </Button>
-            <Button type="submit" className="flex-1" isLoading={isSaving}>
+            <Button type="submit" className="flex-1">
               {editingId ? "Save Changes" : "Add Address"}
             </Button>
           </div>

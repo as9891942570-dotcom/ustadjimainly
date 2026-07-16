@@ -22,7 +22,6 @@ import { formatCurrency } from "@/utils/priceCalculation";
 import { getApiErrorMessage } from "@/lib/axios";
 import {
   createBooking,
-  ensureAddressId,
   getBookingLocation,
 } from "@/services/bookingApi";
 
@@ -98,7 +97,6 @@ function PaymentStep() {
 
     setIsSubmitting(true);
     try {
-      const addressId = await ensureAddressId(user.id, selectedAddress);
       const { latitude, longitude } = await getBookingLocation();
 
       const serviceId = Number(selectedPreference?.id || selectedService.id);
@@ -108,7 +106,7 @@ function PaymentStep() {
 
       await createBooking(user.id, {
         service_id: serviceId,
-        address_id: addressId,
+        address_id: 0,
         booking_date: selectedDate,
         time_slot: selectedTime,
         latitude,
